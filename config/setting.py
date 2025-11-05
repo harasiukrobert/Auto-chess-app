@@ -2,7 +2,8 @@
 SCREEN_WIDTH = 1920
 SCREEN_HEIGHT = 1080
 
-title_size=64
+# map settings
+title_size = 64
 
 Layer={'Background':0,
         'Background2':1,
@@ -15,4 +16,4 @@ Layer={'Background':0,
        'Sheep':8,
        'Tree':9,
        'Rock':10,
-       'Bushe': 11}
+       'Bushes': 11}
