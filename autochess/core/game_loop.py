@@ -1,6 +1,6 @@
 import pygame,sys
 from config.setting import SCREEN_WIDTH,SCREEN_HEIGHT
-from autochess.game.board import Level
+from autochess.game.board import Board
 
 
 class Game():
@@ -8,7 +8,7 @@ class Game():
         pygame.init()
         self.screen=pygame.display.set_mode((SCREEN_WIDTH,SCREEN_HEIGHT))
         pygame.display.set_caption('Podróba TFT')
-        self.level = Level()
+        self.board = Board()
         self.startgame()
 
     def startgame(self):
@@ -26,7 +26,7 @@ class Game():
     def refresh_screen(self):
         self.screen.fill('black')
         pygame.time.Clock().tick(120)
-        self.level.run()
+        self.board.run()
         pygame.display.update()
 
 if __name__ == "__main__":
