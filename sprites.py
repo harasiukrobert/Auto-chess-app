@@ -1,5 +1,4 @@
 import pygame
-cos
 
 class Generic(pygame.sprite.Sprite):
     def __init__(self,surf,pos,groups,z):
