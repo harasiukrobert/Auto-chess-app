@@ -14,4 +14,5 @@ Layer={'Background':0,
        'Positions':7,
        'Sheep':8,
        'Tree':9,
-       'Rock':10,}
+       'Rock':10,
+       'Bushe': 11}

@@ -61,7 +61,7 @@ class Level:
                     offset_x = (w - tile_w) // 2
                     offset_y = h - tile_h
 
-                    Animate(surfs,(base_x - offset_x, base_y - offset_y),self.all_sprites,Layer[layer])
+                    Animate(surfs,(base_x - offset_x, base_y - offset_y), self.all_sprites, Layer[layer])
 
             if layer == 'Rock':
                 tree_layer = tmx_data.get_layer_by_name(layer)
@@ -71,7 +71,25 @@ class Level:
                     k = randrange(len(surfs)) if surfs else 0
                     surfs = surfs[k:] + surfs[:k]
 
-                    Animate(surfs,(x * tile_w, y * tile_h),self.all_sprites,Layer[layer])
+                    Animate(surfs,(x * tile_w, y * tile_h), self.all_sprites, Layer[layer])
+
+            if layer == 'Bushe':
+                tree_layer = tmx_data.get_layer_by_name(layer)
+                for x, y, _ in tree_layer.tiles():
+                    file_name = choice([f for f in ['Bushe1', 'Bushe2', 'Bushe3', 'Bushe4']])
+                    surfs = import_img(f'Files/assets/{file_name}.png', 128)
+                    k = randrange(len(surfs)) if surfs else 0
+                    surfs = surfs[k:] + surfs[:k]
+                    w = surfs[0].get_width()
+                    h = surfs[0].get_height()
+
+                    base_x = x * tile_w
+                    base_y = y * tile_h
+
+                    offset_x = (w - tile_w) // 2
+                    offset_y = h - tile_h
+
+                    Animate(surfs,(base_x - offset_x, base_y - offset_y), self.all_sprites, Layer[layer])
 
     def run(self):
         self.all_sprites.custom_draw()
