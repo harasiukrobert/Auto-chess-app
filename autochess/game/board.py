@@ -1,15 +1,21 @@
 from pytmx.util_pygame import load_pygame
-from autochess.game.sprites import Generic, Animate
+from .sprites import Generic, Animate
 from config.setting import *
 from autochess.utils.config import *
 from random import choice, randrange
+from .units import Unit
 
-class Level:
+class Board:
     def __init__(self):
         self.all_sprites = CameraGroup()
         self.collision_sprites = pygame.sprite.Group()
 
         self.setup()
+
+        self.unit = Unit(groups = self.all_sprites,
+                         pos = (500,500),
+                         name = 'archer',
+                         team= 'blue')
 
     def setup(self):
         tmx_data = load_pygame('files/map_tiled/map.tmx')
@@ -30,7 +36,7 @@ class Level:
 
             if layer == 'Sheep':
                 for x, y, _ in tmx_data.get_layer_by_name(layer).tiles():
-                    surfs = import_img('files/assets/Sheep_Idle.png', 128)
+                    surfs = import_img('files/tiles/Sheep_Idle.png', 128)
                     k = randrange(len(surfs)) if surfs else 0
                     surfs = surfs[k:] + surfs[:k]
                     w = surfs[0].get_width()
@@ -48,7 +54,7 @@ class Level:
                 for x, y, _ in tree_layer.tiles():
                     file_name = choice([f for f in ['Tree1', 'Tree2', 'Tree3', 'Tree4']])
                     pixelsize_two = 256 if file_name == 'Tree1' or file_name=='Tree2' else 192
-                    surfs = import_img_two_diff_sizes(f'files/assets/{file_name}.png', 192, pixelsize_two)
+                    surfs = import_img_two_diff_sizes(f'files/tiles/{file_name}.png', 192, pixelsize_two)
                     k = randrange(len(surfs)) if surfs else 0
                     surfs = surfs[k:] + surfs[:k]
                     w = surfs[0].get_width()
@@ -66,7 +72,7 @@ class Level:
                 tree_layer = tmx_data.get_layer_by_name(layer)
                 for x, y, _ in tree_layer.tiles():
                     file_name = choice([f for f in ['Water Rocks_01', 'Water Rocks_02', 'Water Rocks_03', 'Water Rocks_04']])
-                    surfs = import_img(f'files/assets/{file_name}.png', 64)
+                    surfs = import_img(f'files/tiles/{file_name}.png', 64)
                     k = randrange(len(surfs)) if surfs else 0
                     surfs = surfs[k:] + surfs[:k]
 
@@ -76,7 +82,7 @@ class Level:
                 tree_layer = tmx_data.get_layer_by_name(layer)
                 for x, y, _ in tree_layer.tiles():
                     file_name = choice([f for f in ['Bushe1', 'Bushe2', 'Bushe3', 'Bushe4']])
-                    surfs = import_img(f'files/assets/{file_name}.png', 128)
+                    surfs = import_img(f'files/tiles/{file_name}.png', 128)
                     k = randrange(len(surfs)) if surfs else 0
                     surfs = surfs[k:] + surfs[:k]
                     w = surfs[0].get_width()
