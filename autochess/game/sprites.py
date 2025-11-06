@@ -1,6 +1,5 @@
 import pygame
 
-
 class Generic(pygame.sprite.Sprite):
     def __init__(self,surf,pos,groups,z):
         super().__init__(groups)
