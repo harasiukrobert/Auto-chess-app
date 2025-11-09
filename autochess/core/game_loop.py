@@ -14,6 +14,7 @@ from config.setting import (
 from autochess.game.board import Board
 from autochess.ui.menu import Menu
 from autochess.ui.settings import SettingsScreen
+from autochess.ui.background import BackgroundStatic  # static background helper
 
 
 class Game:
@@ -30,29 +31,15 @@ class Game:
         # States
         self.state = 'MENU'
         self.volume = DEFAULT_VOLUME
+        self.sfx_volume = DEFAULT_VOLUME
         self._load_music(MUSIC_PATH, self.volume)
 
         # Core
         self.board = Board()
         self.clock = pygame.time.Clock()
 
-        # Static background (simple): load and scale to screen size
-        # Make sure the file exists at files/ui/bg_archer.png
-        try:
-            bg = pygame.image.load('files/ui/bg_archer.png')
-        except Exception:
-            # Try JPG fallback if needed
-            try:
-                bg = pygame.image.load('files/ui/bg_archer.jpg')
-            except Exception:
-                bg = None
-
-        if bg is not None:
-            self.menu_bg = pygame.transform.smoothscale(bg.convert(), (SCREEN_WIDTH, SCREEN_HEIGHT))
-        else:
-            # Fallback if not found
-            self.menu_bg = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
-            self.menu_bg.fill((20, 20, 30))
+        # Static archer background (scaled+cropped) - make sure file exists at files/ui/bg_archer.png
+        self.menu_bg = BackgroundStatic(screen=self.screen, image_path='files/ui/bg_archer.png', overlay_alpha=28)
 
         # UI
         self.menu = Menu(
@@ -64,7 +51,9 @@ class Game:
         self.settings_screen = SettingsScreen(
             screen=self.screen,
             volume=self.volume,
+            sfx_volume=self.sfx_volume,
             colors={'text': COLOR_TEXT, 'highlight': COLOR_HIGHLIGHT, 'subtle': COLOR_SUBTLE},
+            game_ref=self
         )
 
         self.startgame()
@@ -73,9 +62,29 @@ class Game:
         try:
             pygame.mixer.music.load(path)
             pygame.mixer.music.set_volume(vol)
-            pygame.mixer.music.play(-1)
+            pygame.mixer.music.play(-1)  # loop forever
+        except Exception:
+            # if file not found or load fails, ignore silently
+            pass
+
+    # helpers used by settings
+    def set_volume(self, vol):
+        try:
+            pygame.mixer.music.set_volume(vol)
         except Exception:
             pass
+        self.volume = vol
+
+    def set_sfx_volume(self, vol):
+        self.sfx_volume = vol
+
+    def apply_fullscreen(self, fullscreen):
+        flags = pygame.FULLSCREEN if fullscreen else 0
+        self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), flags)
+        # reassign screens
+        self.menu.screen = self.screen
+        self.settings_screen.screen = self.screen
+        self.menu_bg = BackgroundStatic(screen=self.screen, image_path='files/ui/bg_archer.png', overlay_alpha=28)
 
     def startgame(self):
         while True:
@@ -100,25 +109,26 @@ class Game:
                         continue
                     result = self.settings_screen.handle_event(event)
                     if result == 'changed':
-                        self.volume = self.settings_screen.volume
-                        try:
-                            pygame.mixer.music.set_volume(self.volume)
-                        except Exception:
-                            pass
+                        # read new values from settings screen attributes
+                        self.volume = getattr(self.settings_screen, 'volume', self.settings_screen.get_music_volume())
+                        self.sfx_volume = getattr(self.settings_screen, 'sfx_volume', self.settings_screen.get_sfx_volume())
+                        self.set_volume(self.volume)
+                        self.set_sfx_volume(self.sfx_volume)
+                    elif result == 'back':
+                        self.state = 'MENU'
 
                 elif self.state == 'PLAY':
                     if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                         self.state = 'MENU'
                         continue
-                    # Future gameplay events go here.
 
             # Draw per state
             if self.state == 'MENU':
-                # Draw archer background (static)
-                self.screen.blit(self.menu_bg, (0, 0))
+                self.menu_bg.draw()
                 self.menu.draw(skip_clear=True)
             elif self.state == 'SETTINGS':
-                self.settings_screen.draw(bg_color=COLOR_BG)
+                self.menu_bg.draw()  # same background for settings
+                self.settings_screen.draw()
             elif self.state == 'PLAY':
                 self.screen.fill('black')
                 self.board.run()
