@@ -9,20 +9,20 @@ class Menu:
         self.hovered = None
         self.font = font or pygame.font.SysFont(None, 64)
         colors = colors or {}
-        # Default text color (non-hover): near-white
         self.color_text = colors.get('text', (230, 230, 230))
-        # Keep highlight for borders on selection via keyboard
-        self.color_highlight = colors.get('highlight', (255, 215, 0))
+        # main blue highlight (used for slider fill, accents)
+        self.color_highlight = colors.get('highlight', (80, 125, 170))
         self.color_subtle = colors.get('subtle', (150, 150, 150))
-        # Subtle blue on hover
-        self.color_hover_text = (160, 200, 255)
+        self.color_hover_text = (20, 40, 70)  # dark-blue text on light-blue hover
 
-        # Button colors (blueish)
-        self.btn_base = (50, 85, 120)
-        self.btn_sel = (80, 125, 170)
-        self.btn_border = (120, 170, 220)
-        self.btn_border_sel = (180, 220, 255)
+        # Button color scheme
+        self.btn_base = (40, 55, 80)         # normal button background (dark blue)
+        self.btn_border = (90, 120, 160)     # normal border
+        # Hover / selected: very light blue background (soft, almost white)
+        self.btn_hover_base = (225, 240, 255)  # very light blue
+        self.btn_hover_border = (160, 200, 240) # blue border for hover
 
+        # Logo
         self.logo = None
         if os.path.exists(logo_path):
             try:
@@ -35,13 +35,14 @@ class Menu:
             except Exception:
                 self.logo = None
 
-        # Layout: Play at center, others below with 2.5x spacing (300px)
+        # Layout
         self.base_y = self.screen.get_height() // 2     # Play position
-        self.spacing = 160                            # Settings and Exit placed below
+        self.spacing = 160                              # user set to 160
         self.pad_x, self.pad_y = 60, 28
         self.button_rects = []  # populated every draw for hover hit-testing
 
     def handle_event(self, event):
+        # Mouse move: update hovered and sync selected
         if event.type == pygame.MOUSEMOTION:
             mx, my = event.pos
             self.hovered = None
@@ -49,16 +50,25 @@ class Menu:
                 if rect.collidepoint(mx, my):
                     self.hovered = i
                     break
+            # keep keyboard and mouse in sync: if user moves mouse, selection follows
+            if self.hovered is not None:
+                self.selected = self.hovered
 
+        # Mouse click: return option under mouse
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if self.hovered is not None:
+                # synchronize selection with the clicked item
+                self.selected = self.hovered
                 return self.options[self.hovered][1]
 
+        # Keyboard: update selected then sync hovered so mouse/keyboard are unified
         if event.type == pygame.KEYDOWN:
             if event.key in (pygame.K_UP, pygame.K_w):
                 self.selected = (self.selected - 1) % len(self.options)
+                self.hovered = self.selected
             elif event.key in (pygame.K_DOWN, pygame.K_s):
                 self.selected = (self.selected + 1) % len(self.options)
+                self.hovered = self.selected
             elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
                 return self.options[self.selected][1]
         return None
@@ -95,13 +105,18 @@ class Menu:
                                    rect.width + self.pad_x * 2,
                                    rect.height + self.pad_y * 2)
 
-            base_col = self.btn_sel if (is_sel or is_hover) else self.btn_base
-            border_col = self.btn_border_sel if (is_sel or is_hover) else self.btn_border
+            if is_sel or is_hover:
+                base_col = self.btn_hover_base
+                border_col = self.btn_hover_border
+            else:
+                base_col = self.btn_base
+                border_col = self.btn_border
 
             pygame.draw.rect(self.screen, base_col, box_rect, border_radius=18)
             pygame.draw.rect(self.screen, border_col, box_rect, width=3, border_radius=18)
 
             if is_sel:
+                # slight inner highlight for keyboard-selected
                 inner = pygame.Rect(box_rect.left + 4, box_rect.top + 4,
                                     box_rect.width - 8, box_rect.height - 8)
                 pygame.draw.rect(self.screen, (255, 255, 255, 20), inner, border_radius=14)
