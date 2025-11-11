@@ -49,6 +49,9 @@ class Menu:
         self.spacing = 160                              # vertical spacing between buttons
         # Reduced vertical padding so the button boxes don't become taller than the art
         self.pad_x, self.pad_y = 60, 12
+        # Small inset so hover overlay doesn't leak past rounded rim
+        HOVER_INSET = 6
+        self.HOVER_INSET = HOVER_INSET
         self.button_rects = []  # populated every draw for hover hit-testing
 
     def handle_event(self, event):
@@ -117,6 +120,9 @@ class Menu:
             box_rect = pygame.Rect(0, 0, max_width, max_height)
             box_rect.center = (w // 2, y)
 
+            # Default hit rect if nothing else set
+            hit_rect_for_button = box_rect
+
             # If we have an image for this button, blit scaled image and optionally tint on hover.
             # New behavior: scale down images to fit box, but do not upscale smaller source art.
             key = label.strip().lower()
@@ -132,19 +138,29 @@ class Menu:
                     img_rect = img_s.get_rect(center=box_rect.center)
                     self.screen.blit(img_s, img_rect)
 
-                    # draw subtle hover overlay if interactive feedback desired
+                    # compute inset overlay rect so hover tint doesn't overflow the artwork
+                    overlay_rect = img_rect.inflate(-self.HOVER_INSET*2, -self.HOVER_INSET*2)
+                    if overlay_rect.width < 4 or overlay_rect.height < 4:
+                        overlay_rect = img_rect.copy()
+
+                    # draw subtle hover overlay sized to the inset image rect so it doesn't overflow
                     if is_sel or is_hover:
-                        overlay = pygame.Surface((box_rect.width, box_rect.height), pygame.SRCALPHA)
+                        overlay = pygame.Surface((overlay_rect.width, overlay_rect.height), pygame.SRCALPHA)
+                        radius = min(18, max(4, overlay_rect.height // 4))
                         pygame.draw.rect(
                             overlay,
                             (255, 230, 100, 80),  # yellowish tint
                             overlay.get_rect(),
-                            border_radius=18
+                            border_radius=radius
                         )
-                        self.screen.blit(overlay, box_rect.topleft)
+                        self.screen.blit(overlay, overlay_rect.topleft)
+
+                    # use inset overlay rect for hit-testing so hover/click align with artwork
+                    hit_rect_for_button = overlay_rect
                 except Exception:
                     # fallback to safe blit if scaling fails
                     self.screen.blit(img, box_rect.topleft)
+                    hit_rect_for_button = box_rect
             else:
                 # --- Fallback: draw stylized rounded rectangle button (if no art) ---
                 base_col = (40, 55, 80)
@@ -161,24 +177,29 @@ class Menu:
                 pygame.draw.rect(self.screen, base_col, box_rect, border_radius=18)
                 pygame.draw.rect(self.screen, border_col, box_rect, width=3, border_radius=18)
 
-                # Draw rounded yellow hover overlay
+                # Draw rounded yellow hover overlay (inset slightly)
+                inner_rect = pygame.Rect(box_rect.left + 2, box_rect.top + 2, box_rect.width - 4, box_rect.height - 4)
                 if is_sel or is_hover:
-                    overlay = pygame.Surface((box_rect.width, box_rect.height), pygame.SRCALPHA)
-                    inner_rect = pygame.Rect(2, 2, box_rect.width - 4, box_rect.height - 4)  # inset by 2px
+                    overlay = pygame.Surface((inner_rect.width, inner_rect.height), pygame.SRCALPHA)
+                    radius = min(16, max(4, inner_rect.height // 4))
                     pygame.draw.rect(
                         overlay,
                         (255, 230, 100, 80),
-                        inner_rect,
-                        border_radius=16  # slightly reduced to match inset shape
+                        overlay.get_rect(),
+                        border_radius=radius
                     )
-                    self.screen.blit(overlay, box_rect.topleft)
+                    self.screen.blit(overlay, inner_rect.topleft)
 
                 # Draw text
                 surf = self.font.render(label, True, text_color)
                 surf_rect = surf.get_rect(center=box_rect.center)
                 self.screen.blit(surf, surf_rect)
 
-            self.button_rects.append(box_rect)
+                # For fallback buttons, align hit rect with inner overlay so clicks/hover match visual
+                hit_rect_for_button = inner_rect
+
+            # append the rect used for hit-testing
+            self.button_rects.append(hit_rect_for_button)
 
         # Hint text at the bottom
         hint_font = pygame.font.SysFont(None, 24)
