@@ -2,7 +2,11 @@ import pygame
 import os
 
 class Menu:
-    def __init__(self, screen, options, font=None, colors=None, logo_path='files/ui/logo.png'):
+    def __init__(self, screen, options, font=None, colors=None, logo_path='files/ui/hexa2.png'):
+        """
+        Menu that uses artwork button images if present.
+        Expects button images at files/ui/buttons/<key>.png where key is 'play', 'options', 'quit'
+        """
         self.screen = screen
         self.options = options  # list of (label, action_key)
         self.selected = 0
@@ -10,17 +14,22 @@ class Menu:
         self.font = font or pygame.font.SysFont(None, 64)
         colors = colors or {}
         self.color_text = colors.get('text', (230, 230, 230))
-        # main blue highlight (used for slider fill, accents)
         self.color_highlight = colors.get('highlight', (80, 125, 170))
         self.color_subtle = colors.get('subtle', (150, 150, 150))
-        self.color_hover_text = (20, 40, 70)  # dark-blue text on light-blue hover
+        self.color_hover_text = (20, 40, 70)
 
-        # Button color scheme
-        self.btn_base = (40, 55, 80)         # normal button background (dark blue)
-        self.btn_border = (90, 120, 160)     # normal border
-        # Hover / selected: very light blue background (soft, almost white)
-        self.btn_hover_base = (225, 240, 255)  # very light blue
-        self.btn_hover_border = (160, 200, 240) # blue border for hover
+        # Button image map: tries to load files/ui/buttons/<key>.png
+        self.button_images = {}
+        for label, _ in self.options:
+            key = label.strip().lower()
+            path = f'files/ui/buttons/{key}.png'
+            if os.path.exists(path):
+                try:
+                    img = pygame.image.load(path).convert_alpha()
+                    self.button_images[key] = img
+                except Exception:
+                    # ignore load errors; fallback to drawn buttons
+                    pass
 
         # Logo
         self.logo = None
@@ -37,12 +46,13 @@ class Menu:
 
         # Layout
         self.base_y = self.screen.get_height() // 2     # Play position
-        self.spacing = 160                              # user set to 160
-        self.pad_x, self.pad_y = 60, 28
+        self.spacing = 160                              # vertical spacing between buttons
+        # Reduced vertical padding so the button boxes don't become taller than the art
+        self.pad_x, self.pad_y = 60, 12
         self.button_rects = []  # populated every draw for hover hit-testing
 
     def handle_event(self, event):
-        # Mouse move: update hovered and sync selected
+        # Mouse motion: update hovered and sync selected
         if event.type == pygame.MOUSEMOTION:
             mx, my = event.pos
             self.hovered = None
@@ -50,18 +60,16 @@ class Menu:
                 if rect.collidepoint(mx, my):
                     self.hovered = i
                     break
-            # keep keyboard and mouse in sync: if user moves mouse, selection follows
             if self.hovered is not None:
                 self.selected = self.hovered
 
         # Mouse click: return option under mouse
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if self.hovered is not None:
-                # synchronize selection with the clicked item
                 self.selected = self.hovered
                 return self.options[self.hovered][1]
 
-        # Keyboard: update selected then sync hovered so mouse/keyboard are unified
+        # Keyboard: update selected and keep hovered in sync
         if event.type == pygame.KEYDOWN:
             if event.key in (pygame.K_UP, pygame.K_w):
                 self.selected = (self.selected - 1) % len(self.options)
@@ -94,37 +102,85 @@ class Menu:
         for i, (label, _) in enumerate(self.options):
             is_sel = (i == self.selected)
             is_hover = (i == self.hovered)
-            text_color = self.color_hover_text if (is_sel or is_hover) else self.color_text
 
-            surf = self.font.render(label, True, text_color)
-            y = self.base_y + (i * self.spacing)  # Play at base_y, others below
-            rect = surf.get_rect(center=(w // 2, y))
+            # Determine button rect (we'll size around the text baseline to keep layout consistent)
+            surf_text = self.font.render(label, True, self.color_text)
+            y = self.base_y + (i * self.spacing)
+            rect = surf_text.get_rect(center=(w // 2, y))
+            if i == 0:
+                # Only calculate once
+                all_widths = [self.font.render(lbl, True, self.color_text).get_width() for lbl, _ in self.options]
+                max_width = max(all_widths) + self.pad_x * 2
+                max_height = self.font.get_height() + self.pad_y * 2
 
-            box_rect = pygame.Rect(rect.left - self.pad_x,
-                                   rect.top - self.pad_y,
-                                   rect.width + self.pad_x * 2,
-                                   rect.height + self.pad_y * 2)
+            y = self.base_y + (i * self.spacing)
+            box_rect = pygame.Rect(0, 0, max_width, max_height)
+            box_rect.center = (w // 2, y)
 
-            if is_sel or is_hover:
-                base_col = self.btn_hover_base
-                border_col = self.btn_hover_border
+            # If we have an image for this button, blit scaled image and optionally tint on hover.
+            # New behavior: scale down images to fit box, but do not upscale smaller source art.
+            key = label.strip().lower()
+            img = self.button_images.get(key)
+            if img:
+                try:
+                    iw, ih = img.get_width(), img.get_height()
+                    bw, bh = box_rect.width, box_rect.height
+                    # compute scale to fit inside box, but don't upscale beyond original size
+                    scale = min(bw / iw, bh / ih, 1.0)
+                    target_w, target_h = int(iw * scale), int(ih * scale)
+                    img_s = pygame.transform.smoothscale(img, (target_w, target_h))
+                    img_rect = img_s.get_rect(center=box_rect.center)
+                    self.screen.blit(img_s, img_rect)
+
+                    # draw subtle hover overlay if interactive feedback desired
+                    if is_sel or is_hover:
+                        overlay = pygame.Surface((box_rect.width, box_rect.height), pygame.SRCALPHA)
+                        pygame.draw.rect(
+                            overlay,
+                            (255, 230, 100, 80),  # yellowish tint
+                            overlay.get_rect(),
+                            border_radius=18
+                        )
+                        self.screen.blit(overlay, box_rect.topleft)
+                except Exception:
+                    # fallback to safe blit if scaling fails
+                    self.screen.blit(img, box_rect.topleft)
             else:
-                base_col = self.btn_base
-                border_col = self.btn_border
+                # --- Fallback: draw stylized rounded rectangle button (if no art) ---
+                base_col = (40, 55, 80)
+                border_col = (90, 120, 160)
+                text_color = self.color_text
 
-            pygame.draw.rect(self.screen, base_col, box_rect, border_radius=18)
-            pygame.draw.rect(self.screen, border_col, box_rect, width=3, border_radius=18)
+                # Hover or selected state
+                if is_sel or is_hover:
+                    base_col = (60, 70, 90)
+                    border_col = (255, 230, 100)  # yellow border
+                    text_color = (20, 40, 70)
 
-            if is_sel:
-                # slight inner highlight for keyboard-selected
-                inner = pygame.Rect(box_rect.left + 4, box_rect.top + 4,
-                                    box_rect.width - 8, box_rect.height - 8)
-                pygame.draw.rect(self.screen, (255, 255, 255, 20), inner, border_radius=14)
+                # Draw base rounded button
+                pygame.draw.rect(self.screen, base_col, box_rect, border_radius=18)
+                pygame.draw.rect(self.screen, border_col, box_rect, width=3, border_radius=18)
 
-            self.screen.blit(surf, rect)
+                # Draw rounded yellow hover overlay
+                if is_sel or is_hover:
+                    overlay = pygame.Surface((box_rect.width, box_rect.height), pygame.SRCALPHA)
+                    inner_rect = pygame.Rect(2, 2, box_rect.width - 4, box_rect.height - 4)  # inset by 2px
+                    pygame.draw.rect(
+                        overlay,
+                        (255, 230, 100, 80),
+                        inner_rect,
+                        border_radius=16  # slightly reduced to match inset shape
+                    )
+                    self.screen.blit(overlay, box_rect.topleft)
+
+                # Draw text
+                surf = self.font.render(label, True, text_color)
+                surf_rect = surf.get_rect(center=box_rect.center)
+                self.screen.blit(surf, surf_rect)
+
             self.button_rects.append(box_rect)
 
-        # Hint
+        # Hint text at the bottom
         hint_font = pygame.font.SysFont(None, 24)
         hint = hint_font.render("Up/Down + Enter • Mouse hover/click • Esc exits", True, self.color_subtle)
         hint_rect = hint.get_rect(center=(w // 2, h - 40))

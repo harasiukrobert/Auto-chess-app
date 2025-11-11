@@ -26,8 +26,8 @@ Layer = {
 FPS = 120
 
 # audio / UI settings
-# default menu volume (lower so music isn't loud). Changed to a round 10% as requested.
-DEFAULT_VOLUME = 0.10
+# default menu volume — changed to 50% so sliders start at a sensible level
+DEFAULT_VOLUME = 0.50
 # Point this to your menu music file (wav or ogg). Put menu.wav at files/audio/menu.wav
 MUSIC_PATH = 'files/audio/menu.wav'
 
