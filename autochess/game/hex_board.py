@@ -1,5 +1,6 @@
 import math
 
+
 import pygame
 
 # hex settings
@@ -25,6 +26,7 @@ class HexSprite(pygame.sprite.Sprite):
         size = int(radius * 2.2)
         self.image = pygame.Surface((size, size), pygame.SRCALPHA)
         self.rect = self.image.get_rect(center=(x, y))
+        self.hitbox = self.rect.copy().inflate(-self.rect.width * 0.5, -self.rect.height * 0.5)
         
         self.center_offset = (size / 2, size / 2)
         self.base_points = self._compute_vertices()
@@ -65,13 +67,15 @@ class HexSprite(pygame.sprite.Sprite):
         pygame.draw.polygon(self.image, HEX_BORDER_COLOR, current_points, 3)
 
 class HexGridManager:
-    def __init__(self, cols, rows, center_pos, group, layer):
+    def __init__(self, cols, rows, center_pos, group, units, layer):
         self.cols = cols
         self.rows = rows
         self.center_pos = center_pos
         self.group = group
         self.layer = layer
         self.hexes = []
+        self.units = units
+        self.left_pressed = False
         
         self.wave_radius = 0
         self.max_dist = 0
@@ -108,6 +112,35 @@ class HexGridManager:
         
         self.generated = True
 
+    def collision(self):
+        mouse_pos = pygame.mouse.get_pos()
+        press = pygame.mouse.get_pressed()[0]
+
+        if self.left_pressed == False:
+            for sprite in self.units:
+                if sprite.hitbox.collidepoint(mouse_pos) and press:
+                    self.left_pressed = True
+        else:
+            if not press:
+                self.left_pressed = False
+
+        # alpha = 125 if self.left_pressed else 0
+        # for sprite in Positions.all_positions:
+        #     sprite.image.set_alpha(alpha)
+
+        for sprite in self.units:
+            if self.left_pressed:
+                sprite.rect=sprite.image.get_rect(center=mouse_pos)
+                sprite.hitbox = sprite.rect.copy().inflate(-sprite.rect.width * 0.7, -sprite.rect.height * 0.7)
+
+    def set_the_center(self):
+        for sprite in self.units:
+            for pos in self.hexes:
+                if sprite.hitbox.colliderect(pos.hitbox):
+                    if not self.left_pressed:
+                        sprite.rect = sprite.image.get_rect(center=pos.rect.center)
+                        sprite.hitbox = sprite.rect.copy().inflate(-sprite.rect.width * 0.7, -sprite.rect.height * 0.7)
+
     def update(self):
         if not self.generated: return
         
@@ -117,3 +150,6 @@ class HexGridManager:
         for h in self.hexes:
             if not h.active and h.dist_from_center <= self.wave_radius:
                 h.activate()
+
+        self.collision()
+        self.set_the_center()

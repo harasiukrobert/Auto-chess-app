@@ -9,41 +9,40 @@ from .hex_board import HexGridManager
 from .sprites import Animate, Generic
 from .units import Unit
 
-
 class Board:
-    def __init__(self, hex_center=(640, 360)): 
+    def __init__(self, hex_center=(640, 360)):
         self.all_sprites = CameraGroup()
-        self.collision_sprites = pygame.sprite.Group()
-        
-        self.hex_center_pos = hex_center 
-        
-        # Draw hex grid behind other sprites
-        bg_layer_index = Layer['Area'] if 'Area' in Layer else 0
-        self.hex_manager = HexGridManager(
-            cols=9, 
-            rows=6, 
-            center_pos=self.hex_center_pos, 
-            group=self.all_sprites,
-            layer=bg_layer_index + 1 
-        )
+        self.units = pygame.sprite.Group()
 
+        self.unit = Unit(groups = [self.all_sprites, self.units],
+                         pos = (500,500),
+                         name = 'warrior',
+                         team= 'blue')
+
+        self.hex_center_pos = hex_center
+
+        # Draw hex grid behind other sprites
+        self.hex_manager = HexGridManager(
+            cols=9,
+            rows=6,
+            center_pos=self.hex_center_pos,
+            group=self.all_sprites,
+            units = self.units,
+            layer=Layer['Positions']
+        )
         self.setup()
 
-        self.unit = Unit(groups = self.all_sprites,
-                         pos = (500,500),
-                         name = 'archer',
-                         team= 'blue')
 
     def setup(self):
         self.hex_manager.generate()
-        
+
         tmx_data = load_pygame('files/map_tiled/map.tmx')
         tile_w, tile_h = tmx_data.tilewidth, tmx_data.tileheight
 
         for layer in tmx_data.layernames:
             if layer == 'Area':
                 for x, y, surf in tmx_data.get_layer_by_name(layer).tiles():
-                    Generic(surf, (x * tile_w, y * tile_h), [self.all_sprites, self.collision_sprites], Layer[layer])
+                    Generic(surf, (x * tile_w, y * tile_h), self.all_sprites, Layer[layer])
 
             if layer in ('Decoration', 'Decoration2', 'Background2', 'Background'):
                 for x, y, surf in tmx_data.get_layer_by_name(layer).tiles():
@@ -132,9 +131,14 @@ class CameraGroup(pygame.sprite.Group):
                 if layer == sprite.z:
                     self.display_surf.blit(sprite.image, sprite.rect)
                     # Debug hitboxów (opcjonalnie):
-                    # hitbox_surf = pygame.Surface((sprite.hitbox.width, sprite.hitbox.height))
-                    # hitbox_surf.fill('red')
-                    # self.display_surf.blit(hitbox_surf, sprite.hitbox)
+                    if layer == Layer['Units']:
+                        hitbox_surf = pygame.Surface((sprite.hitbox.width, sprite.hitbox.height))
+                    #     hitbox_surf.fill('red')
+                    #     self.display_surf.blit(hitbox_surf, sprite.hitbox)
+                    # if layer == Layer['Positions']:
+                    #     hitbox_surf = pygame.Surface((sprite.hitbox.width, sprite.hitbox.height))
+                    #     hitbox_surf.fill('blue')
+                    #     self.display_surf.blit(hitbox_surf, sprite.hitbox)
                     # if hasattr(sprite, 'hitbox_b'):
                     #     hitbox_b_surf = pygame.Surface((sprite.hitbox_b.width, sprite.hitbox_b.height))
                     #     hitbox_b_surf.fill('blue')

@@ -1,4 +1,4 @@
-import pygame
+import os
 from autochess.utils.config import *
 from config.setting import *
 
@@ -22,18 +22,22 @@ class Unit(pygame.sprite.Sprite):
         self.image=self.animations[self.status][self.index]
         self.rect=self.image.get_rect(topleft=pos)
         self.z=z
-        self.hitbox=self.rect.copy().inflate(-12,-5)
-        self.hitbox_b=self.rect.copy().inflate(-12,-25)
+        self.hitbox=self.rect.copy().inflate(-self.rect.width * 0.7, -self.rect.height * 0.7)
 
 
     def import_assets(self):
         self.animations = {'Idle': [],
                            'Run': [],
-                           'Shoot': []}
+                           'Attack': [],
+                           'Attack_down': [],
+                           'Attack_up': [],
+                           'Heal': [],}
 
         for animation in self.animations.keys():
+            pixle_size = 320 if self.name == 'lancer' else 192
             path = f'files/units/{self.team}_units/{self.name}/{animation}.png'
-            self.animations[animation] = import_img(path, 192)
+            if os.path.exists(path):
+                self.animations[animation] = import_img(path, pixle_size)
 
     def animate(self):
         self.index += 0.10

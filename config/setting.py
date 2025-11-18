@@ -14,11 +14,11 @@ Layer = {
     'Decoration': 4,
     'Area': 5,
     'Board': 6,
-    'Positions': 7,
-    'Sheep': 8,
-    'Tree': 9,
-    'Rock': 10,
-    'Bushes': 11,
+    'Sheep': 7,
+    'Tree': 8,
+    'Rock': 9,
+    'Bushes': 10,
+    'Positions': 11,
     'Units': 12,
 }
 
