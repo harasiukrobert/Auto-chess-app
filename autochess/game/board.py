@@ -4,18 +4,19 @@ from config.setting import *
 from autochess.utils.config import *
 from random import choice, randrange
 from .units import Unit
+from autochess.ui.input import Positions
 
 class Board:
     def __init__(self):
         self.all_sprites = CameraGroup()
-        self.collision_sprites = pygame.sprite.Group()
+        self.units = pygame.sprite.Group()
 
-        self.setup()
-
-        self.unit = Unit(groups = self.all_sprites,
+        self.unit = Unit(groups = [self.all_sprites, self.units],
                          pos = (500,500),
                          name = 'archer',
                          team= 'blue')
+        self.setup()
+
 
     def setup(self):
         tmx_data = load_pygame('files/map_tiled/map.tmx')
@@ -24,7 +25,7 @@ class Board:
         for layer in tmx_data.layernames:
             if layer == 'Area':
                 for x, y, surf in tmx_data.get_layer_by_name(layer).tiles():
-                    Generic(surf, (x * tile_w, y * tile_h), [self.all_sprites, self.collision_sprites], Layer[layer])
+                    Generic(surf, (x * tile_w, y * tile_h), self.all_sprites, Layer[layer])
 
             if layer in ('Decoration', 'Decoration2', 'Background2', 'Background'):
                 for x, y, surf in tmx_data.get_layer_by_name(layer).tiles():
@@ -33,6 +34,11 @@ class Board:
             if layer == 'ObjectsDecorations':
                 for obj in tmx_data.get_layer_by_name(layer):
                     Generic(obj.image, (obj.x, obj.y), self.all_sprites, Layer[layer])
+
+            if layer == 'Positions':
+                for obj in tmx_data.get_layer_by_name(layer):
+                    Positions(obj.image, (obj.x, obj.y), self.all_sprites, self.units, Layer[layer])
+
 
             if layer == 'Sheep':
                 for x, y, _ in tmx_data.get_layer_by_name(layer).tiles():
@@ -112,9 +118,14 @@ class CameraGroup(pygame.sprite.Group):
                 if layer == sprite.z:
                     self.display_surf.blit(sprite.image, sprite.rect)
                     # Debug hitboxów (opcjonalnie):
-                    # hitbox_surf = pygame.Surface((sprite.hitbox.width, sprite.hitbox.height))
-                    # hitbox_surf.fill('red')
-                    # self.display_surf.blit(hitbox_surf, sprite.hitbox)
+                    # if layer == Layer['Units']:
+                    #     hitbox_surf = pygame.Surface((sprite.hitbox.width, sprite.hitbox.height))
+                    #     hitbox_surf.fill('red')
+                    #     self.display_surf.blit(hitbox_surf, sprite.hitbox)
+                    # if layer == Layer['Positions']:
+                    #     hitbox_surf = pygame.Surface((sprite.hitbox.width, sprite.hitbox.height))
+                    #     hitbox_surf.fill('blue')
+                    #     self.display_surf.blit(hitbox_surf, sprite.hitbox)
                     # if hasattr(sprite, 'hitbox_b'):
                     #     hitbox_b_surf = pygame.Surface((sprite.hitbox_b.width, sprite.hitbox_b.height))
                     #     hitbox_b_surf.fill('blue')
