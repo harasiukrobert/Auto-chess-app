@@ -30,12 +30,14 @@ class Unit(pygame.sprite.Sprite):
                            'Run': [],
                            'Attack': [],
                            'Attack_down': [],
-                           'Attack_up': [],}
+                           'Attack_up': [],
+                           'Heal': [],}
 
         for animation in self.animations.keys():
+            pixle_size = 320 if self.name == 'lancer' else 192
             path = f'files/units/{self.team}_units/{self.name}/{animation}.png'
             if os.path.exists(path):
-                self.animations[animation] = import_img(path, 192)
+                self.animations[animation] = import_img(path, pixle_size)
 
     def animate(self):
         self.index += 0.10

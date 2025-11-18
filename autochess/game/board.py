@@ -1,24 +1,41 @@
-from pytmx.util_pygame import load_pygame
-from .sprites import Generic, Animate
-from config.setting import *
-from autochess.utils.config import *
 from random import choice, randrange
+
+from pytmx.util_pygame import load_pygame
+
+from autochess.utils.config import *
+from config.setting import *
+
+from .hex_board import HexGridManager
+from .sprites import Animate, Generic
 from .units import Unit
-from autochess.ui.input import Positions
 
 class Board:
-    def __init__(self):
+    def __init__(self, hex_center=(640, 360)):
         self.all_sprites = CameraGroup()
         self.units = pygame.sprite.Group()
 
         self.unit = Unit(groups = [self.all_sprites, self.units],
                          pos = (500,500),
-                         name = 'archer',
+                         name = 'warrior',
                          team= 'blue')
+
+        self.hex_center_pos = hex_center
+
+        # Draw hex grid behind other sprites
+        self.hex_manager = HexGridManager(
+            cols=9,
+            rows=6,
+            center_pos=self.hex_center_pos,
+            group=self.all_sprites,
+            units = self.units,
+            layer=Layer['Positions']
+        )
         self.setup()
 
 
     def setup(self):
+        self.hex_manager.generate()
+
         tmx_data = load_pygame('files/map_tiled/map.tmx')
         tile_w, tile_h = tmx_data.tilewidth, tmx_data.tileheight
 
@@ -34,11 +51,6 @@ class Board:
             if layer == 'ObjectsDecorations':
                 for obj in tmx_data.get_layer_by_name(layer):
                     Generic(obj.image, (obj.x, obj.y), self.all_sprites, Layer[layer])
-
-            if layer == 'Positions':
-                for obj in tmx_data.get_layer_by_name(layer):
-                    Positions(obj.image, (obj.x, obj.y), self.all_sprites, self.units, Layer[layer])
-
 
             if layer == 'Sheep':
                 for x, y, _ in tmx_data.get_layer_by_name(layer).tiles():
@@ -103,6 +115,7 @@ class Board:
                     Animate(surfs,(base_x - offset_x, base_y - offset_y), self.all_sprites, Layer[layer])
 
     def run(self):
+        self.hex_manager.update()
         self.all_sprites.custom_draw()
         self.all_sprites.update()
 
@@ -118,8 +131,8 @@ class CameraGroup(pygame.sprite.Group):
                 if layer == sprite.z:
                     self.display_surf.blit(sprite.image, sprite.rect)
                     # Debug hitboxów (opcjonalnie):
-                    # if layer == Layer['Units']:
-                    #     hitbox_surf = pygame.Surface((sprite.hitbox.width, sprite.hitbox.height))
+                    if layer == Layer['Units']:
+                        hitbox_surf = pygame.Surface((sprite.hitbox.width, sprite.hitbox.height))
                     #     hitbox_surf.fill('red')
                     #     self.display_surf.blit(hitbox_surf, sprite.hitbox)
                     # if layer == Layer['Positions']:
