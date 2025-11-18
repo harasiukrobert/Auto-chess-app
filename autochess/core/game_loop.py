@@ -1,21 +1,16 @@
-import pygame,sys
 import os
+import sys
 
-from config.setting import (
-    SCREEN_WIDTH,
-    SCREEN_HEIGHT,
-    FPS,
-    DEFAULT_VOLUME,
-    MUSIC_PATH,
-    COLOR_BG,
-    COLOR_TEXT,
-    COLOR_HIGHLIGHT,
-    COLOR_SUBTLE,
-)
+import pygame
+
 from autochess.game.board import Board
+from autochess.ui.background import \
+    BackgroundStatic  # static background helper
 from autochess.ui.menu import Menu
 from autochess.ui.settings import SettingsScreen
-from autochess.ui.background import BackgroundStatic  # static background helper
+from config.setting import (COLOR_BG, COLOR_HIGHLIGHT, COLOR_SUBTLE,
+                            COLOR_TEXT, DEFAULT_VOLUME, FPS, MUSIC_PATH,
+                            SCREEN_HEIGHT, SCREEN_WIDTH, title_size)
 
 
 class Game:
@@ -40,7 +35,7 @@ class Game:
         self._load_music(MUSIC_PATH, self.volume)
 
         # Core
-        self.board = Board()
+        self.board = Board(hex_center=(SCREEN_WIDTH // 2 + title_size, SCREEN_HEIGHT // 2))
         self.clock = pygame.time.Clock()
 
         # Static archer background (scaled+cropped)

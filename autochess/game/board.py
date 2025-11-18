@@ -1,14 +1,31 @@
-from pytmx.util_pygame import load_pygame
-from .sprites import Generic, Animate
-from config.setting import *
-from autochess.utils.config import *
 from random import choice, randrange
+
+from pytmx.util_pygame import load_pygame
+
+from autochess.utils.config import *
+from config.setting import *
+
+from .hex_board import HexGridManager
+from .sprites import Animate, Generic
 from .units import Unit
 
+
 class Board:
-    def __init__(self):
+    def __init__(self, hex_center=(640, 360)): 
         self.all_sprites = CameraGroup()
         self.collision_sprites = pygame.sprite.Group()
+        
+        self.hex_center_pos = hex_center 
+        
+        # Draw hex grid behind other sprites
+        bg_layer_index = Layer['Area'] if 'Area' in Layer else 0
+        self.hex_manager = HexGridManager(
+            cols=9, 
+            rows=6, 
+            center_pos=self.hex_center_pos, 
+            group=self.all_sprites,
+            layer=bg_layer_index + 1 
+        )
 
         self.setup()
 
@@ -18,6 +35,8 @@ class Board:
                          team= 'blue')
 
     def setup(self):
+        self.hex_manager.generate()
+        
         tmx_data = load_pygame('files/map_tiled/map.tmx')
         tile_w, tile_h = tmx_data.tilewidth, tmx_data.tileheight
 
@@ -97,6 +116,7 @@ class Board:
                     Animate(surfs,(base_x - offset_x, base_y - offset_y), self.all_sprites, Layer[layer])
 
     def run(self):
+        self.hex_manager.update()
         self.all_sprites.custom_draw()
         self.all_sprites.update()
 
