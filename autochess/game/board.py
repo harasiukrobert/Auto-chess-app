@@ -197,6 +197,10 @@ class Board:
                     Animate(surfs,(base_x - offset_x, base_y - offset_y), self.all_sprites, Layer[layer])
 
     def run(self):
+        # ensure occupancy is initialized once grid generated
+        if not getattr(self, '_occ_init_done', False) and getattr(self.hex_manager, 'generated', False):
+            self.hex_manager.initialize_occupancy()
+            self._occ_init_done = True
         self.hex_manager.update()
         self.all_sprites.custom_draw()
         self.all_sprites.update()
@@ -280,6 +284,8 @@ class Board:
             new_u.sync_pos_from_rect()
             new_u.hitbox = new_u.rect.copy().inflate(-new_u.rect.width * 0.7, -new_u.rect.height * 0.7)
             self._reset_unit_state(new_u)
+        # refresh occupancy after rebuild
+        self.hex_manager.initialize_occupancy()
 
     def add_enemies_for_round(self, round_num: int):
         """Rebuild enemies from last snapshot/base and add extras for scaling."""
@@ -312,6 +318,8 @@ class Board:
             recreated.append({'name': 'warrior', 'pos': pos})
         # update base for next round progression
         self._enemy_round_base = recreated
+        # refresh occupancy after enemies
+        self.hex_manager.initialize_occupancy()
 
     def team_alive_counts(self):
         blue = sum(1 for u in self.units if getattr(u, 'team', None) == 'blue' and u.alive)
@@ -340,6 +348,15 @@ class Board:
         u.sync_pos_from_rect()
         u.hitbox = u.rect.copy().inflate(-u.rect.width * 0.7, -u.rect.height * 0.7)
         self._reset_unit_state(u)
+        # place onto a free hex nearest to click, enforcing one-per-hex
+        placed = False
+        if hasattr(self.hex_manager, 'find_nearest_hex_center'):
+            target = self.hex_manager.find_nearest_hex_center(pos)
+            if target:
+                placed = self.hex_manager.assign_unit_to_hex(u, target['hex'])
+        if not placed:
+            # fallback: find any free hex (prefer player side)
+            self.hex_manager.place_unit_on_free_hex(u, prefer_top=False)
         return u
 
 
