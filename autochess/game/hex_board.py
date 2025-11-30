@@ -124,6 +124,8 @@ class HexGridManager:
         self.occupancy = {}
         # previous position for dragged unit to revert if drop invalid
         self._drag_prev_center = None
+        # previous hex key to revert precisely back to original hex
+        self._drag_prev_hex_key = None
 
     def generate(self):
         """Generuj siatkę heksów"""
@@ -260,6 +262,12 @@ class HexGridManager:
                 if sprite.hitbox.collidepoint(mouse_pos):
                     self.selected_unit = sprite
                     self._drag_prev_center = sprite.rect.center
+                    # Remember which hex the unit currently occupies
+                    self._drag_prev_hex_key = None
+                    for k, v in self.occupancy.items():
+                        if v is sprite:
+                            self._drag_prev_hex_key = k
+                            break
                     # apply color overrides: occupied vs free
                     for h in self.hexes:
                         if self.is_hex_free(h) or self.occupancy.get((h.r, h.c)) is sprite:
@@ -286,15 +294,16 @@ class HexGridManager:
                 if self.selected_unit.hitbox.colliderect(h.hitbox):
                     if (self.is_hex_free(h) or self.occupancy.get((h.r, h.c)) is self.selected_unit):
                         placed = self.assign_unit_to_hex(self.selected_unit, h)
-                    else:
-                        # choose closest alternative free hex
-                        free_hexes = [hx for hx in self.hexes if self.is_hex_free(hx)]
-                        if free_hexes:
-                            alt = min(free_hexes, key=lambda hh: math.hypot(hh.rect.centerx - self.selected_unit.rect.centerx,
-                                                                            hh.rect.centery - self.selected_unit.rect.centery))
-                            placed = self.assign_unit_to_hex(self.selected_unit, alt)
             if not placed and self._drag_prev_center:
-                self.selected_unit.rect.center = self._drag_prev_center
+                # revert to original hex center if known
+                revert_center = self._drag_prev_center
+                if self._drag_prev_hex_key is not None:
+                    r, c = self._drag_prev_hex_key
+                    for hx in self.hexes:
+                        if hx.r == r and hx.c == c:
+                            revert_center = hx.rect.center
+                            break
+                self.selected_unit.rect.center = revert_center
                 if hasattr(self.selected_unit, 'sync_pos_from_rect'):
                     self.selected_unit.sync_pos_from_rect()
                 self.selected_unit.hitbox = self.selected_unit.rect.copy().inflate(
@@ -306,6 +315,7 @@ class HexGridManager:
                     h.redraw()
             self.selected_unit = None
             self._drag_prev_center = None
+            self._drag_prev_hex_key = None
 
     def set_the_center(self):
         """Przyciągaj jednostki do środka heksów"""
