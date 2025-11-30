@@ -4,21 +4,14 @@ import sys
 import pygame
 
 from autochess.game.board import Board
-from autochess.ui.background import BackgroundStatic  # static background helper
+from autochess.ui.background import \
+    BackgroundStatic  # static background helper
 from autochess.ui.menu import Menu
 from autochess.ui.settings import SettingsScreen
-from config.setting import (
-    COLOR_BG,
-    COLOR_HIGHLIGHT,
-    COLOR_SUBTLE,
-    COLOR_TEXT,
-    DEFAULT_VOLUME,
-    FPS,
-    MUSIC_PATH,
-    SCREEN_HEIGHT,
-    SCREEN_WIDTH,
-    title_size,
-)
+from autochess.ui.shop import Shop
+from config.setting import (COLOR_BG, COLOR_HIGHLIGHT, COLOR_SUBTLE,
+                            COLOR_TEXT, DEFAULT_VOLUME, FPS, MUSIC_PATH,
+                            SCREEN_HEIGHT, SCREEN_WIDTH, title_size)
 
 
 class Game:
@@ -50,6 +43,16 @@ class Game:
         # Core
         self.board = Board(hex_center=(SCREEN_WIDTH // 2 + title_size, SCREEN_HEIGHT // 2))
         self.clock = pygame.time.Clock()
+        # Turn-based phases inside PLAY
+        self.phase = 'PLANNING'  # 'PLANNING' | 'COMBAT'
+
+        # Shop overlay (planning only)
+        self.shop = Shop(
+            screen=self.screen,
+            items=['warrior', 'archer', 'lancer', 'monk'],
+            colors={"bg": (20, 20, 28), "border": COLOR_HIGHLIGHT, "text": COLOR_TEXT},
+            on_spawn=self._shop_spawn_unit,
+        )
 
         # Static archer background (scaled+cropped)
         self.menu_bg = BackgroundStatic(
@@ -91,6 +94,16 @@ class Game:
             pass
 
         self.startgame()
+
+    def _shop_spawn_unit(self, name: str, pos):
+        """Spawn a blue unit via Board, return the instance for drag selection."""
+        try:
+            u = self.board.spawn_blue_unit(name, pos)
+            # Do NOT auto-select while the mouse is still pressed; avoid jumping to shop click
+            # Player can click the unit afterwards to drag it.
+            return u
+        except Exception:
+            return None
 
     def _ensure_play_music(self, path, vol):
         """
@@ -153,6 +166,8 @@ class Game:
         # reassign screens & rebuild scaled backgrounds
         self.menu.screen = self.screen
         self.settings_screen.screen = self.screen
+        if hasattr(self, 'shop'):
+            self.shop.screen = self.screen
         self.menu_bg = BackgroundStatic(
             screen=self.screen, image_path="files/ui/bg_archer.png", overlay_alpha=28
         )
@@ -212,7 +227,17 @@ class Game:
                             # self._ensure_play_music(menu_music_path, self.volume)
                             continue
                         elif event.key == pygame.K_TAB:
-                            self.board.hex_manager.toggle_combat()
+                            # Toggle combat only from planning
+                            if self.phase == 'PLANNING':
+                                # snapshot layout before fight (for retry on loss)
+                                self.board.snapshot_planning_layout()
+                                # snapshot enemies so next round starts with same set
+                                self.board.snapshot_enemy_layout()
+                                self.phase = 'COMBAT'
+                                self.board.hex_manager.toggle_combat()
+                    # route mouse events to shop only in planning phase
+                    if self.phase == 'PLANNING':
+                        _ = self.shop.handle_event(event)
 
             # Draw per state
             if self.state == "MENU":
@@ -229,6 +254,33 @@ class Game:
                 self._ensure_play_music(play_music_path, self.volume)
                 self.screen.fill("black")
                 self.board.run()
+                if self.phase == 'PLANNING':
+                    # Draw shop UI above the board during planning
+                    self.shop.draw()
+
+                # Round end detection during combat
+                if self.phase == 'COMBAT' and self.board.hex_manager.is_combat_active():
+                    blue_alive, red_alive = self.board.team_alive_counts()
+                    if blue_alive == 0 or red_alive == 0:
+                        # End of round
+                        player_won = blue_alive > 0 and red_alive == 0
+                        # Reset combat visuals
+                        self.board.hex_manager.toggle_combat()  # back to planning
+                        if player_won:
+                            # Advance round, reset units and add new enemies
+                            self.board.current_round += 1
+                            self.board.reset_units_to_initial()
+                            self.board.add_enemies_for_round(self.board.current_round)
+                            # Placeholder: grant rewards, enable shop/upgrade
+                            # TODO: integrate shop and upgrade systems here
+                        else:
+                            # Loss: restore last planning layout to retry
+                            self.board.restore_planning_layout()
+                            # Rebuild enemies strictly from snapshot positions (no extras)
+                            self.board.rebuild_enemies_from_snapshot(include_extras=False, round_num=self.board.current_round)
+                            # Placeholder: reverse purchases from snapshot
+                            # TODO: rollback buys stored in snapshot
+                        self.phase = 'PLANNING'
 
             pygame.display.update()
             self.clock.tick(FPS)

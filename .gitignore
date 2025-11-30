@@ -1,0 +1,9 @@
+*.py[cod]
+__pycache__
+*.so
+.env
+venv/
+.vscode/
+.DS_Store
+user_settings.json
+.github/copilot-instructions.md

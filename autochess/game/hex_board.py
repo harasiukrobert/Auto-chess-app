@@ -1,4 +1,5 @@
 import math
+
 import pygame
 
 HEX_RADIUS = 64
@@ -7,6 +8,9 @@ ANIMATION_SPEED = 0.05
 WAVE_SPEED = 10
 HEX_COLOR = (128, 128, 128, 100)
 HEX_BORDER_COLOR = (64, 64, 64)
+# Drag colors used during unit dragging (no alpha overlay)
+DRAG_FREE_COLOR = (128, 128, 128, 100)
+DRAG_OCCUPIED_COLOR = (64, 64, 64, 150)
 
 
 class HexSprite(pygame.sprite.Sprite):
@@ -20,6 +24,7 @@ class HexSprite(pygame.sprite.Sprite):
         self.z = layer
 
         self.scale = 0.0
+        self.dynamic_color = None  # temporary override fill color during drag
         self.active = False
         self.dist_from_center = 0
         self.shrinking = False
@@ -57,18 +62,23 @@ class HexSprite(pygame.sprite.Sprite):
 
     def update(self):
         """Aktualizuj animację heksa"""
+        # original scale animation
+        scale_changed = False
         if self.shrinking:
             if self.scale > 0.0:
                 self.scale -= ANIMATION_SPEED
                 if self.scale < 0.0:
                     self.scale = 0.0
-                self.redraw()
+                scale_changed = True
         else:
             if self.active and self.scale < 1.0:
                 self.scale += ANIMATION_SPEED
                 if self.scale > 1.0:
                     self.scale = 1.0
-                self.redraw()
+                scale_changed = True
+        # Force redraw if scale changed OR an overlay is currently applied
+        if scale_changed or self.dynamic_color is not None:
+            self.redraw()
 
     def redraw(self):
         """Przerysuj heks"""
@@ -84,7 +94,8 @@ class HexSprite(pygame.sprite.Sprite):
             ny = cy + (oy * self.scale)
             current_points.append((nx, ny))
 
-        pygame.draw.polygon(self.image, HEX_COLOR, current_points)
+        base_color = self.dynamic_color if self.dynamic_color else HEX_COLOR
+        pygame.draw.polygon(self.image, base_color, current_points)
         pygame.draw.polygon(self.image, HEX_BORDER_COLOR, current_points, 3)
 
 
@@ -109,6 +120,12 @@ class HexGridManager:
         self.shrink_wave_radius = 0
         self.shrinking_started = False
         self.grid_fully_hidden = False
+        # occupancy map: (r,c) -> Unit or None
+        self.occupancy = {}
+        # previous position for dragged unit to revert if drop invalid
+        self._drag_prev_center = None
+        # previous hex key to revert precisely back to original hex
+        self._drag_prev_hex_key = None
 
     def generate(self):
         """Generuj siatkę heksów"""
@@ -140,6 +157,7 @@ class HexGridManager:
                     self.max_dist = dist
 
                 self.hexes.append(hex_sprite)
+                self.occupancy[(r, c)] = None
 
         self.generated = True
 
@@ -158,6 +176,56 @@ class HexGridManager:
                 h.shrinking = False
                 h.scale = 1.0
                 h.redraw()
+
+    def is_combat_active(self):
+        """Return True when combat is ongoing and grid fully hidden."""
+        return self.combat_mode and self.grid_fully_hidden
+
+    # --- Occupancy helpers ---
+    def initialize_occupancy(self):
+        """Assign current units to nearest hex centers to seed occupancy."""
+        for key in list(self.occupancy.keys()):
+            self.occupancy[key] = None
+        for u in self.units:
+            hc = self.find_nearest_hex_center(u.rect.center)
+            if hc:
+                h = hc['hex']
+                key = (h.r, h.c)
+                if self.occupancy.get(key) is None:
+                    self.occupancy[key] = u
+                    u.rect.center = h.rect.center
+                    if hasattr(u, 'sync_pos_from_rect'):
+                        u.sync_pos_from_rect()
+
+    def find_nearest_hex_center(self, pos):
+        """Return dict with hex and distance to its center for given screen pos."""
+        best = None
+        bx, by = pos
+        for h in self.hexes:
+            d = math.hypot(h.rect.centerx - bx, h.rect.centery - by)
+            if best is None or d < best['dist']:
+                best = {'hex': h, 'dist': d}
+        return best
+
+    def is_hex_free(self, hex_sprite):
+        return self.occupancy.get((hex_sprite.r, hex_sprite.c)) is None
+
+    def assign_unit_to_hex(self, unit, hex_sprite):
+        key = (hex_sprite.r, hex_sprite.c)
+        # clear any previous assignment of this unit
+        for k, v in self.occupancy.items():
+            if v is unit:
+                self.occupancy[k] = None
+        # set new if free
+        if self.occupancy.get(key) is None:
+            self.occupancy[key] = unit
+            unit.rect.center = hex_sprite.rect.center
+            if hasattr(unit, 'sync_pos_from_rect'):
+                unit.sync_pos_from_rect()
+            unit.hitbox = unit.rect.copy().inflate(
+                -unit.rect.width * 0.7, -unit.rect.height * 0.7)
+            return True
+        return False
 
     def update_shrink_animation(self):
         """Aktualizuj animację zanikania siatki"""
@@ -186,18 +254,68 @@ class HexGridManager:
         mouse_pos = pygame.mouse.get_pos()
         press = pygame.mouse.get_pressed()[0]
 
-        if self.selected_unit is None:
+        if self.selected_unit is None and press:
+            # start drag
             for sprite in self.units:
-                if sprite.hitbox.collidepoint(mouse_pos) and press:
+                if not hasattr(sprite, 'hitbox'):
+                    continue
+                if sprite.hitbox.collidepoint(mouse_pos):
                     self.selected_unit = sprite
-        else:
-            if not press:
-                self.selected_unit = None
+                    self._drag_prev_center = sprite.rect.center
+                    # Remember which hex the unit currently occupies
+                    self._drag_prev_hex_key = None
+                    for k, v in self.occupancy.items():
+                        if v is sprite:
+                            self._drag_prev_hex_key = k
+                            break
+                    # apply color overrides: occupied vs free
+                    for h in self.hexes:
+                        if self.is_hex_free(h) or self.occupancy.get((h.r, h.c)) is sprite:
+                            if DRAG_FREE_COLOR is not None:
+                                h.dynamic_color = DRAG_FREE_COLOR
+                        else:
+                            if DRAG_OCCUPIED_COLOR is not None:
+                                h.dynamic_color = DRAG_OCCUPIED_COLOR
+                        h.redraw()
+                    break
 
-        if self.selected_unit:
+        if self.selected_unit and press:
+            # dragging following mouse
             self.selected_unit.rect = self.selected_unit.image.get_rect(center=mouse_pos)
             self.selected_unit.hitbox = self.selected_unit.rect.copy().inflate(
                 -self.selected_unit.rect.width * 0.7, -self.selected_unit.rect.height * 0.7)
+
+        if self.selected_unit and not press:
+            # release: attempt snap to nearest free hex; else revert
+            placed = False
+            nearest = self.find_nearest_hex_center(self.selected_unit.rect.center)
+            if nearest:
+                h = nearest['hex']
+                if self.selected_unit.hitbox.colliderect(h.hitbox):
+                    if (self.is_hex_free(h) or self.occupancy.get((h.r, h.c)) is self.selected_unit):
+                        placed = self.assign_unit_to_hex(self.selected_unit, h)
+            if not placed and self._drag_prev_center:
+                # revert to original hex center if known
+                revert_center = self._drag_prev_center
+                if self._drag_prev_hex_key is not None:
+                    r, c = self._drag_prev_hex_key
+                    for hx in self.hexes:
+                        if hx.r == r and hx.c == c:
+                            revert_center = hx.rect.center
+                            break
+                self.selected_unit.rect.center = revert_center
+                if hasattr(self.selected_unit, 'sync_pos_from_rect'):
+                    self.selected_unit.sync_pos_from_rect()
+                self.selected_unit.hitbox = self.selected_unit.rect.copy().inflate(
+                    -self.selected_unit.rect.width * 0.7, -self.selected_unit.rect.height * 0.7)
+            # clear drag state and color overrides
+            for h in self.hexes:
+                if h.dynamic_color is not None:
+                    h.dynamic_color = None
+                    h.redraw()
+            self.selected_unit = None
+            self._drag_prev_center = None
+            self._drag_prev_hex_key = None
 
     def set_the_center(self):
         """Przyciągaj jednostki do środka heksów"""
@@ -205,12 +323,14 @@ class HexGridManager:
             return
 
         for sprite in self.units:
-            for pos in self.hexes:
-                if sprite.hitbox.colliderect(pos.hitbox):
-                    if not self.selected_unit:
-                        sprite.rect = sprite.image.get_rect(center=pos.rect.center)
-                        sprite.hitbox = sprite.rect.copy().inflate(-sprite.rect.width * 0.7,
-                                                                   -sprite.rect.height * 0.7)
+            if not hasattr(sprite, 'hitbox'):
+                continue
+            # Only snap when not dragging
+            if self.selected_unit is None:
+                nearest = self.find_nearest_hex_center(sprite.rect.center)
+                if nearest:
+                    h = nearest['hex']
+                    self.assign_unit_to_hex(sprite, h)
 
     def update_combat(self):
         """Aktualizuj logikę walki dla wszystkich jednostek"""
@@ -222,6 +342,22 @@ class HexGridManager:
 
         for unit in all_units:
             unit.combat_update(all_units)
+
+    # placement used by spawners to ensure one unit per hex
+    def place_unit_on_free_hex(self, unit, prefer_top=True):
+        """Place unit on first free hex scanning rows.
+        prefer_top: True for enemy (red), False for player (blue)
+        """
+        seq = sorted(self.hexes, key=lambda h: (h.r, h.c))
+        if prefer_top:
+            seq = sorted(seq, key=lambda h: h.r)  # small r is top
+        else:
+            seq = sorted(seq, key=lambda h: -h.r)
+        for h in seq:
+            if self.is_hex_free(h):
+                self.assign_unit_to_hex(unit, h)
+                return True
+        return False
 
     def update(self):
         """Główna aktualizacja menedżera"""
