@@ -8,6 +8,7 @@ from autochess.ui.background import \
     BackgroundStatic  # static background helper
 from autochess.ui.menu import Menu
 from autochess.ui.settings import SettingsScreen
+from autochess.ui.shop import Shop
 from config.setting import (COLOR_BG, COLOR_HIGHLIGHT, COLOR_SUBTLE,
                             COLOR_TEXT, DEFAULT_VOLUME, FPS, MUSIC_PATH,
                             SCREEN_HEIGHT, SCREEN_WIDTH, title_size)
@@ -44,6 +45,14 @@ class Game:
         self.clock = pygame.time.Clock()
         # Turn-based phases inside PLAY
         self.phase = 'PLANNING'  # 'PLANNING' | 'COMBAT'
+
+        # Shop overlay (planning only)
+        self.shop = Shop(
+            screen=self.screen,
+            items=['warrior', 'archer', 'lancer', 'monk'],
+            colors={"bg": (20, 20, 28), "border": COLOR_HIGHLIGHT, "text": COLOR_TEXT},
+            on_spawn=self._shop_spawn_unit,
+        )
 
         # Static archer background (scaled+cropped)
         self.menu_bg = BackgroundStatic(
@@ -85,6 +94,16 @@ class Game:
             pass
 
         self.startgame()
+
+    def _shop_spawn_unit(self, name: str, pos):
+        """Spawn a blue unit via Board, return the instance for drag selection."""
+        try:
+            u = self.board.spawn_blue_unit(name, pos)
+            # Immediately select it for dragging in planning
+            self.board.hex_manager.selected_unit = u
+            return u
+        except Exception:
+            return None
 
     def _ensure_play_music(self, path, vol):
         """
@@ -147,6 +166,8 @@ class Game:
         # reassign screens & rebuild scaled backgrounds
         self.menu.screen = self.screen
         self.settings_screen.screen = self.screen
+        if hasattr(self, 'shop'):
+            self.shop.screen = self.screen
         self.menu_bg = BackgroundStatic(
             screen=self.screen, image_path="files/ui/bg_archer.png", overlay_alpha=28
         )
@@ -214,6 +235,9 @@ class Game:
                                 self.board.snapshot_enemy_layout()
                                 self.phase = 'COMBAT'
                                 self.board.hex_manager.toggle_combat()
+                    # route mouse events to shop only in planning phase
+                    if self.phase == 'PLANNING':
+                        _ = self.shop.handle_event(event)
 
             # Draw per state
             if self.state == "MENU":
@@ -230,6 +254,9 @@ class Game:
                 self._ensure_play_music(play_music_path, self.volume)
                 self.screen.fill("black")
                 self.board.run()
+                if self.phase == 'PLANNING':
+                    # Draw shop UI above the board during planning
+                    self.shop.draw()
 
                 # Round end detection during combat
                 if self.phase == 'COMBAT' and self.board.hex_manager.is_combat_active():

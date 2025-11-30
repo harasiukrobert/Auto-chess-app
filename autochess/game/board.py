@@ -103,6 +103,8 @@ class Board:
             }
             for u in self.units if getattr(u, 'team', None) == 'blue'
         ]
+        # current round baseline for blue units, updated each planning snapshot
+        self._blue_round_base = list(self._blue_initial_specs)
         # baseline enemy list (red team) captured from initial board
         self._enemy_round_base = [
             {
@@ -207,6 +209,11 @@ class Board:
             # shop placeholders:
             'purchases': []  # TODO: fill with buy data when shop is implemented
         }
+        # Update blue round baseline so post-win reset reflects current roster
+        self._blue_round_base = [
+            {'name': u.name, 'pos': (u.rect.centerx, u.rect.centery)}
+            for u in self.units if getattr(u, 'team', None) == 'blue'
+        ]
 
     def snapshot_enemy_layout(self):
         """Save current enemy configuration to carry forward to next round."""
@@ -261,30 +268,18 @@ class Board:
                 self._reset_unit_state(u)
 
     def reset_units_to_initial(self):
-        """Reset player (blue) units to initial planning positions for next round.
-        Respawn missing blue units from initial specs and clear all combat flags.
-        """
-        # Ensure all initial blue units exist and are reset
-        existing_blue = [u for u in self.units if getattr(u, 'team', None) == 'blue']
-        # map by name+nearest position; keep simple: rebuild if dead/missing count
-        for spec in self._blue_initial_specs:
-            # find a living unit to reset, else recreate
-            target_unit = None
-            for u in existing_blue:
-                if u.alive and u.name == spec['name']:
-                    target_unit = u
-                    break
-            if target_unit is None:
-                # recreate missing unit
-                target_unit = Unit(groups=[self.all_sprites, self.units],
-                                   pos=spec['pos'],
-                                   name=spec['name'],
-                                   team='blue')
-            # position and clear state
-            target_unit.rect.center = spec['pos']
-            target_unit.sync_pos_from_rect()
-            target_unit.hitbox = target_unit.rect.copy().inflate(-target_unit.rect.width * 0.7, -target_unit.rect.height * 0.7)
-            self._reset_unit_state(target_unit)
+        """Rebuild player (blue) units to the latest planning baseline for the next round."""
+        # remove all current blue units
+        for u in list(self.units):
+            if getattr(u, 'team', None) == 'blue':
+                u.kill()
+        # recreate from round baseline
+        for spec in self._blue_round_base:
+            new_u = Unit(groups=[self.all_sprites, self.units], pos=spec['pos'], name=spec['name'], team='blue')
+            new_u.rect.center = spec['pos']
+            new_u.sync_pos_from_rect()
+            new_u.hitbox = new_u.rect.copy().inflate(-new_u.rect.width * 0.7, -new_u.rect.height * 0.7)
+            self._reset_unit_state(new_u)
 
     def add_enemies_for_round(self, round_num: int):
         """Rebuild enemies from last snapshot/base and add extras for scaling."""
@@ -337,6 +332,15 @@ class Board:
         u.heal_target = None
         u.heal_action_delay = 0
         u.target = None
+
+    def spawn_blue_unit(self, name: str, pos: tuple[int, int]):
+        """Create a new blue unit at a screen position (treated as center)."""
+        u = Unit(groups=[self.all_sprites, self.units], pos=pos, name=name, team='blue')
+        u.rect.center = pos
+        u.sync_pos_from_rect()
+        u.hitbox = u.rect.copy().inflate(-u.rect.width * 0.7, -u.rect.height * 0.7)
+        self._reset_unit_state(u)
+        return u
 
 
 class CameraGroup(pygame.sprite.Group):
