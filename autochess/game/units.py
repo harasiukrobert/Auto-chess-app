@@ -1,5 +1,6 @@
-import os
 import math
+import os
+
 from autochess.utils.config import *
 from config.setting import *
 
@@ -298,8 +299,9 @@ class Unit(pygame.sprite.Sprite):
         """Wystrzel pocisk w kierunku celu"""
         start_pos = self.rect.center
 
+        # Add projectile only to visual group (exclude units group to avoid drag logic)
         projectile = Projectile(
-            groups=self.groups_ref,
+            groups=[self.groups_ref[0]],
             start_pos=start_pos,
             target=target,
             speed=self.projectile_speed,
@@ -309,8 +311,9 @@ class Unit(pygame.sprite.Sprite):
 
     def spawn_heal_effect(self, target):
         """Stwórz efekt leczenia na celu"""
+        # Add heal effect only to visual group (exclude units group)
         HealEffect(
-            groups=self.groups_ref,
+            groups=[self.groups_ref[0]],
             target=target,
             team=self.team,
             z=Layer['Units']

@@ -9,10 +9,16 @@ from .hex_board import HexGridManager
 from .sprites import Animate, Generic
 from .units import Unit
 
+
 class Board:
     def __init__(self, hex_center=(640, 360)):
         self.all_sprites = CameraGroup()
         self.units = pygame.sprite.Group()
+        # round state helpers
+        self.current_round = 1
+        self._planning_snapshot = None  # stores unit layout and purchases for retry
+        self._enemy_snapshot = None     # stores enemy layout before combat to carry forward
+
         #team1
         Unit(groups=[self.all_sprites, self.units],
              pos=(500, 700),
@@ -88,6 +94,23 @@ class Board:
             layer=Layer['Positions']
         )
         self.setup()
+        # store initial positions/specs for reset (blue team)
+        self._initial_positions = {u: (u.rect.centerx, u.rect.centery) for u in self.units}
+        self._blue_initial_specs = [
+            {
+                'name': u.name,
+                'pos': (u.rect.centerx, u.rect.centery)
+            }
+            for u in self.units if getattr(u, 'team', None) == 'blue'
+        ]
+        # baseline enemy list (red team) captured from initial board
+        self._enemy_round_base = [
+            {
+                'name': u.name,
+                'pos': (u.rect.centerx, u.rect.centery)
+            }
+            for u in self.units if getattr(u, 'team', None) == 'red'
+        ]
 
 
     def setup(self):
@@ -175,6 +198,145 @@ class Board:
         self.hex_manager.update()
         self.all_sprites.custom_draw()
         self.all_sprites.update()
+
+    # --- Round helpers ---
+    def snapshot_planning_layout(self):
+        """Save current unit layout and placeholder purchases for retry."""
+        self._planning_snapshot = {
+            'positions': {u: (u.rect.centerx, u.rect.centery) for u in self.units if u.alive},
+            # shop placeholders:
+            'purchases': []  # TODO: fill with buy data when shop is implemented
+        }
+
+    def snapshot_enemy_layout(self):
+        """Save current enemy configuration to carry forward to next round."""
+        self._enemy_snapshot = [
+            {'name': u.name, 'pos': (u.rect.centerx, u.rect.centery)}
+            for u in self.units if getattr(u, 'team', None) == 'red'
+        ]
+
+    def rebuild_enemies_from_snapshot(self, include_extras=False, round_num: int = 1):
+        """Recreate enemies strictly from the latest snapshot.
+        Optionally include per-round extras. Used on loss to ensure enemies return
+        to their planning positions instead of death positions.
+        """
+        base = self._enemy_snapshot if self._enemy_snapshot is not None else self._enemy_round_base
+        # remove all current red units
+        for u in list(self.units):
+            if getattr(u, 'team', None) == 'red':
+                u.kill()
+        recreated = []
+        # recreate snapshot enemies at their center positions
+        for spec in base:
+            new_u = Unit(groups=[self.all_sprites, self.units], pos=spec['pos'], name=spec['name'], team='red')
+            new_u.rect.center = spec['pos']
+            new_u.sync_pos_from_rect()
+            new_u.hitbox = new_u.rect.copy().inflate(-new_u.rect.width * 0.7, -new_u.rect.height * 0.7)
+            self._reset_unit_state(new_u)
+            recreated.append({'name': spec['name'], 'pos': spec['pos']})
+
+        if include_extras:
+            extra_count = max(0, round_num - 1)
+            for i in range(extra_count):
+                pos = (1100 - i * 60, 220 + (i % 2) * 80)
+                new_u = Unit(groups=[self.all_sprites, self.units], pos=pos, name='warrior', team='red')
+                new_u.rect.center = pos
+                new_u.sync_pos_from_rect()
+                new_u.hitbox = new_u.rect.copy().inflate(-new_u.rect.width * 0.7, -new_u.rect.height * 0.7)
+                self._reset_unit_state(new_u)
+                recreated.append({'name': 'warrior', 'pos': pos})
+
+        # update baseline for next progression step
+        self._enemy_round_base = recreated
+
+    def restore_planning_layout(self):
+        """Restore unit positions to last snapshot (used on loss retry)."""
+        if not self._planning_snapshot:
+            return
+        for u, pos in self._planning_snapshot.get('positions', {}).items():
+            if u.alive:
+                u.rect.center = pos
+                u.sync_pos_from_rect()
+                u.hitbox = u.rect.copy().inflate(-u.rect.width * 0.7, -u.rect.height * 0.7)
+                self._reset_unit_state(u)
+
+    def reset_units_to_initial(self):
+        """Reset player (blue) units to initial planning positions for next round.
+        Respawn missing blue units from initial specs and clear all combat flags.
+        """
+        # Ensure all initial blue units exist and are reset
+        existing_blue = [u for u in self.units if getattr(u, 'team', None) == 'blue']
+        # map by name+nearest position; keep simple: rebuild if dead/missing count
+        for spec in self._blue_initial_specs:
+            # find a living unit to reset, else recreate
+            target_unit = None
+            for u in existing_blue:
+                if u.alive and u.name == spec['name']:
+                    target_unit = u
+                    break
+            if target_unit is None:
+                # recreate missing unit
+                target_unit = Unit(groups=[self.all_sprites, self.units],
+                                   pos=spec['pos'],
+                                   name=spec['name'],
+                                   team='blue')
+            # position and clear state
+            target_unit.rect.center = spec['pos']
+            target_unit.sync_pos_from_rect()
+            target_unit.hitbox = target_unit.rect.copy().inflate(-target_unit.rect.width * 0.7, -target_unit.rect.height * 0.7)
+            self._reset_unit_state(target_unit)
+
+    def add_enemies_for_round(self, round_num: int):
+        """Rebuild enemies from last snapshot/base and add extras for scaling."""
+        # choose snapshot if available, else baseline
+        base = self._enemy_snapshot if self._enemy_snapshot is not None else self._enemy_round_base
+        # remove all current red units
+        for u in list(self.units):
+            if getattr(u, 'team', None) == 'red':
+                u.kill()
+        # recreate base enemies
+        recreated = []
+        for spec in base:
+            new_u = Unit(groups=[self.all_sprites, self.units], pos=spec['pos'], name=spec['name'], team='red')
+            # Treat stored position as center, not topleft
+            new_u.rect.center = spec['pos']
+            new_u.sync_pos_from_rect()
+            new_u.hitbox = new_u.rect.copy().inflate(-new_u.rect.width * 0.7, -new_u.rect.height * 0.7)
+            self._reset_unit_state(new_u)
+            recreated.append({'name': spec['name'], 'pos': spec['pos']})
+        # add extras based on round number
+        extra_count = max(0, round_num - 1)
+        for i in range(extra_count):
+            pos = (1100 - i * 60, 220 + (i % 2) * 80)
+            new_u = Unit(groups=[self.all_sprites, self.units], pos=pos, name='warrior', team='red')
+            # Center-based placement for consistency
+            new_u.rect.center = pos
+            new_u.sync_pos_from_rect()
+            new_u.hitbox = new_u.rect.copy().inflate(-new_u.rect.width * 0.7, -new_u.rect.height * 0.7)
+            self._reset_unit_state(new_u)
+            recreated.append({'name': 'warrior', 'pos': pos})
+        # update base for next round progression
+        self._enemy_round_base = recreated
+
+    def team_alive_counts(self):
+        blue = sum(1 for u in self.units if getattr(u, 'team', None) == 'blue' and u.alive)
+        red = sum(1 for u in self.units if getattr(u, 'team', None) == 'red' and u.alive)
+        return blue, red
+
+    def _reset_unit_state(self, u):
+        """Clear combat/animation flags and cooldowns to prevent freeze."""
+        u.status = 'Idle'
+        u.attack_cooldown = 0
+        u.heal_cooldown = 0
+        u.is_attacking = False
+        u.is_healing = False
+        u.pending_shot = False
+        u.shot_target = None
+        u.shot_delay = 0
+        u.pending_heal = False
+        u.heal_target = None
+        u.heal_action_delay = 0
+        u.target = None
 
 
 class CameraGroup(pygame.sprite.Group):

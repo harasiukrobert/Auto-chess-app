@@ -1,4 +1,5 @@
 import math
+
 import pygame
 
 HEX_RADIUS = 64
@@ -159,6 +160,10 @@ class HexGridManager:
                 h.scale = 1.0
                 h.redraw()
 
+    def is_combat_active(self):
+        """Return True when combat is ongoing and grid fully hidden."""
+        return self.combat_mode and self.grid_fully_hidden
+
     def update_shrink_animation(self):
         """Aktualizuj animację zanikania siatki"""
         if not self.shrinking_started:
@@ -188,6 +193,9 @@ class HexGridManager:
 
         if self.selected_unit is None:
             for sprite in self.units:
+                # Skip non-unit sprites (effects/projectiles) without hitbox
+                if not hasattr(sprite, 'hitbox'):
+                    continue
                 if sprite.hitbox.collidepoint(mouse_pos) and press:
                     self.selected_unit = sprite
         else:
