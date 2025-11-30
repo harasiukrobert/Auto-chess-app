@@ -19,33 +19,8 @@ class Board:
         self._planning_snapshot = None  # stores unit layout and purchases for retry
         self._enemy_snapshot = None     # stores enemy layout before combat to carry forward
 
-        #team1
-        Unit(groups=[self.all_sprites, self.units],
-             pos=(500, 700),
-             name='archer',
-             team='blue')
-        Unit(groups=[self.all_sprites, self.units],
-             pos=(1000, 600),
-             name='Warrior',
-             team='blue')
-        Unit(groups=[self.all_sprites, self.units],
-             pos=(900, 600),
-             name='Warrior',
-             team='blue')
-        Unit(groups=[self.all_sprites, self.units],
-             pos=(800, 600),
-             name='Warrior',
-             team='blue')
-
-        Unit(groups=[self.all_sprites, self.units],
-             pos=(600, 500),
-             name='lancer',
-             team='blue')
-
-        Unit(groups=[self.all_sprites, self.units],
-             pos=(600, 700),
-             name='monk',
-             team='blue')
+           # Note: no initial user (blue) units are spawned.
+           # Players will place units manually via the shop using spawn_blue_unit.
 
         #team2
         Unit(groups=[self.all_sprites, self.units],
@@ -342,21 +317,28 @@ class Board:
         u.target = None
 
     def spawn_blue_unit(self, name: str, pos: tuple[int, int]):
-        """Create a new blue unit at a screen position (treated as center)."""
-        u = Unit(groups=[self.all_sprites, self.units], pos=pos, name=name, team='blue')
-        u.rect.center = pos
+        """Create a new blue unit and place it on the closest free hex.
+        Important: Do not add the unit to any group until a free hex is found,
+        so it never appears under the shop overlay.
+        """
+        # Determine the closest free hex to the click position
+        free_hexes = [hx for hx in self.hex_manager.hexes if self.hex_manager.is_hex_free(hx)]
+        if not free_hexes:
+            return None
+        chosen_hex = min(
+            free_hexes,
+            key=lambda hh: (hh.rect.centerx - pos[0]) ** 2 + (hh.rect.centery - pos[1]) ** 2
+        )
+
+        # Create the unit only now, once we know we can place it
+        u = Unit(groups=[self.all_sprites, self.units], pos=chosen_hex.rect.center, name=name, team='blue')
+        u.rect.center = chosen_hex.rect.center
         u.sync_pos_from_rect()
         u.hitbox = u.rect.copy().inflate(-u.rect.width * 0.7, -u.rect.height * 0.7)
         self._reset_unit_state(u)
-        # place onto a free hex nearest to click, enforcing one-per-hex
-        placed = False
-        if hasattr(self.hex_manager, 'find_nearest_hex_center'):
-            target = self.hex_manager.find_nearest_hex_center(pos)
-            if target:
-                placed = self.hex_manager.assign_unit_to_hex(u, target['hex'])
-        if not placed:
-            # fallback: find any free hex (prefer player side)
-            self.hex_manager.place_unit_on_free_hex(u, prefer_top=False)
+
+        # Assign to occupancy map for that hex (guaranteed free)
+        self.hex_manager.assign_unit_to_hex(u, chosen_hex)
         return u
 
 

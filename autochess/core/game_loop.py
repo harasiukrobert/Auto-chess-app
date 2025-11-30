@@ -99,8 +99,8 @@ class Game:
         """Spawn a blue unit via Board, return the instance for drag selection."""
         try:
             u = self.board.spawn_blue_unit(name, pos)
-            # Immediately select it for dragging in planning
-            self.board.hex_manager.selected_unit = u
+            # Do NOT auto-select while the mouse is still pressed; avoid jumping to shop click
+            # Player can click the unit afterwards to drag it.
             return u
         except Exception:
             return None
