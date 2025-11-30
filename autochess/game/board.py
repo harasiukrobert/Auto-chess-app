@@ -14,10 +14,14 @@ class Board:
         self.all_sprites = CameraGroup()
         self.units = pygame.sprite.Group()
 
-        self.unit = Unit(groups = [self.all_sprites, self.units],
-                         pos = (500,500),
-                         name = 'warrior',
-                         team= 'blue')
+        list = ['warrior', 'archer', 'lancer', 'monk']
+        pos=500
+        for i in list:
+            pos+=100
+            Unit(groups = [self.all_sprites, self.units],
+                             pos = (pos,500),
+                             name = i,
+                             team= 'blue')
 
         self.hex_center_pos = hex_center
 

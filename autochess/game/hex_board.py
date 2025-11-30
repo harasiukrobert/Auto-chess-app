@@ -75,7 +75,7 @@ class HexGridManager:
         self.layer = layer
         self.hexes = []
         self.units = units
-        self.left_pressed = False
+        self.selected_unit = None
         
         self.wave_radius = 0
         self.max_dist = 0
@@ -116,28 +116,26 @@ class HexGridManager:
         mouse_pos = pygame.mouse.get_pos()
         press = pygame.mouse.get_pressed()[0]
 
-        if self.left_pressed == False:
+        if self.selected_unit == None:
             for sprite in self.units:
                 if sprite.hitbox.collidepoint(mouse_pos) and press:
-                    self.left_pressed = True
+                    self.selected_unit = sprite
         else:
             if not press:
-                self.left_pressed = False
-
+                self.selected_unit = None
         # alpha = 125 if self.left_pressed else 0
         # for sprite in Positions.all_positions:
         #     sprite.image.set_alpha(alpha)
 
-        for sprite in self.units:
-            if self.left_pressed:
-                sprite.rect=sprite.image.get_rect(center=mouse_pos)
-                sprite.hitbox = sprite.rect.copy().inflate(-sprite.rect.width * 0.7, -sprite.rect.height * 0.7)
+        if self.selected_unit:
+            self.selected_unit.rect=self.selected_unit.image.get_rect(center=mouse_pos)
+            self.selected_unit.hitbox = self.selected_unit.rect.copy().inflate(-self.selected_unit.rect.width * 0.7, -self.selected_unit.rect.height * 0.7)
 
     def set_the_center(self):
         for sprite in self.units:
             for pos in self.hexes:
                 if sprite.hitbox.colliderect(pos.hitbox):
-                    if not self.left_pressed:
+                    if not self.selected_unit:
                         sprite.rect = sprite.image.get_rect(center=pos.rect.center)
                         sprite.hitbox = sprite.rect.copy().inflate(-sprite.rect.width * 0.7, -sprite.rect.height * 0.7)
 
