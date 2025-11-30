@@ -6,7 +6,7 @@ DEBUG_BG = False  # set True temporarily to print load info
 def load_and_cover(path: str, target_size: tuple[int, int]) -> pygame.Surface:
     """
     Load an image and scale it to cover target_size while preserving aspect ratio.
-    Center-crops excess. Similar to CSS background-size: cover.
+    Center-crops excess.Similar to CSS background-size: cover.
     """
     target_w, target_h = target_size
     raw = pygame.image.load(path).convert_alpha()

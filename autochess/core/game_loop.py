@@ -142,11 +142,14 @@ class Game:
                     elif result == 'back':
                         self.state = 'MENU'
 
-                elif self.state == 'PLAY':
-                    if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                        self.state = 'MENU'
-                        continue
-                    # future game events go here...
+                elif self.state == "PLAY":
+                    if event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_ESCAPE:
+                            self.state = "MENU"
+                            # self._ensure_play_music(menu_music_path, self.volume)
+                            continue
+                        elif event.key == pygame.K_TAB:
+                            self.board.hex_manager.toggle_combat()
 
             # Draw per state
             if self.state == 'MENU':
