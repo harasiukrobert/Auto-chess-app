@@ -13,15 +13,68 @@ class Board:
     def __init__(self, hex_center=(640, 360)):
         self.all_sprites = CameraGroup()
         self.units = pygame.sprite.Group()
+        #team1
+        Unit(groups=[self.all_sprites, self.units],
+             pos=(500, 700),
+             name='archer',
+             team='blue')
+        Unit(groups=[self.all_sprites, self.units],
+             pos=(1000, 600),
+             name='Warrior',
+             team='blue')
+        Unit(groups=[self.all_sprites, self.units],
+             pos=(900, 600),
+             name='Warrior',
+             team='blue')
+        Unit(groups=[self.all_sprites, self.units],
+             pos=(800, 600),
+             name='Warrior',
+             team='blue')
 
-        list = ['warrior', 'archer', 'lancer', 'monk']
-        pos=500
-        for i in list:
-            pos+=100
-            Unit(groups = [self.all_sprites, self.units],
-                             pos = (pos,500),
-                             name = i,
-                             team= 'blue')
+        Unit(groups=[self.all_sprites, self.units],
+             pos=(600, 500),
+             name='lancer',
+             team='blue')
+
+        Unit(groups=[self.all_sprites, self.units],
+             pos=(600, 700),
+             name='monk',
+             team='blue')
+
+        #team2
+        Unit(groups=[self.all_sprites, self.units],
+             pos=(1000, 300),
+             name='Warrior',
+             team='red')
+        Unit(groups=[self.all_sprites, self.units],
+             pos=(900, 300),
+             name='Warrior',
+             team='red')
+        Unit(groups=[self.all_sprites, self.units],
+             pos=(800, 300),
+             name='Warrior',
+             team='red')
+
+        Unit(groups=[self.all_sprites, self.units],
+             pos=(1100, 200),
+             name='lancer',
+             team='red')
+
+        Unit(groups=[self.all_sprites, self.units],
+             pos=(1000, 200),
+             name='monk',
+             team='red')
+
+        Unit(groups=[self.all_sprites, self.units],
+             pos=(1100, 200),
+             name='archer',
+             team='red')
+
+
+
+
+
+
 
         self.hex_center_pos = hex_center
 
@@ -135,8 +188,8 @@ class CameraGroup(pygame.sprite.Group):
                 if layer == sprite.z:
                     self.display_surf.blit(sprite.image, sprite.rect)
                     # Debug hitboxów (opcjonalnie):
-                    if layer == Layer['Units']:
-                        hitbox_surf = pygame.Surface((sprite.hitbox.width, sprite.hitbox.height))
+                    # if layer == Layer['Units']:
+                    #     hitbox_surf = pygame.Surface((sprite.hitbox.width, sprite.hitbox.height))
                     #     hitbox_surf.fill('red')
                     #     self.display_surf.blit(hitbox_surf, sprite.hitbox)
                     # if layer == Layer['Positions']:

@@ -10,7 +10,7 @@ DEFAULTS = {
 }
 
 # ---------- TUNING (change these numbers to reposition & resize UI) ----------
-# Pixel offsets applied to the computed positions. Change and re-run.
+# Pixel offsets applied to the computed positions.Change and re-run.
 MUSIC_Y_ADJ = 33           # move music slider up/down (px)
 SFX_Y_ADJ = 14             # move sfx slider up/down (px)
 BAR_X_ADJ = 0              # move both bars left/right (px)
