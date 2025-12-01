@@ -18,6 +18,9 @@ class Board:
         self.current_round = 1
         self._planning_snapshot = None  # stores unit layout and purchases for retry
         self._enemy_snapshot = None     # stores enemy layout before combat to carry forward
+        
+        # Gold tracking
+        self.gold = 10  # Starting gold
 
            # Note: no initial user (blue) units are spawned.
            # Players will place units manually via the shop using spawn_blue_unit.

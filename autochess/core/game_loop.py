@@ -52,6 +52,8 @@ class Game:
             items=['warrior', 'archer', 'lancer', 'monk'],
             colors={"bg": (20, 20, 28), "border": COLOR_HIGHLIGHT, "text": COLOR_TEXT},
             on_spawn=self._shop_spawn_unit,
+            on_get_gold=self._get_gold,
+            on_deduct_gold=self._deduct_gold,
         )
 
         # Static archer background (scaled+cropped)
@@ -104,6 +106,17 @@ class Game:
             return u
         except Exception:
             return None
+    
+    def _get_gold(self):
+        """Get current player gold from board."""
+        return self.board.gold
+    
+    def _deduct_gold(self, amount: int):
+        """Try to deduct gold. Returns True if successful, False if insufficient funds."""
+        if self.board.gold >= amount:
+            self.board.gold -= amount
+            return True
+        return False
 
     def _ensure_play_music(self, path, vol):
         """
@@ -271,8 +284,8 @@ class Game:
                             self.board.current_round += 1
                             self.board.reset_units_to_initial()
                             self.board.add_enemies_for_round(self.board.current_round)
-                            # Placeholder: grant rewards, enable shop/upgrade
-                            # TODO: integrate shop and upgrade systems here
+                            # Grant gold reward for winning the round
+                            self.board.gold += 5
                         else:
                             # Loss: restore last planning layout to retry
                             self.board.restore_planning_layout()
