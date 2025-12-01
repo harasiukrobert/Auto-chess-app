@@ -7,3 +7,12 @@ venv/
 .DS_Store
 user_settings.json
 .github/copilot-instructions.md
+
+# Symlinks for case-sensitivity fixes
+files
+Files/units/*/Idle.png
+Files/units/*/Run.png
+Files/units/*/Attack.png
+Files/units/*/*/Idle.png
+Files/units/*/*/Run.png
+Files/units/*/*/Attack.png

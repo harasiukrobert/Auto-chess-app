@@ -28,15 +28,15 @@ class Board:
         #team2
         Unit(groups=[self.all_sprites, self.units],
              pos=(1000, 300),
-             name='Warrior',
+             name='warrior',
              team='red')
         Unit(groups=[self.all_sprites, self.units],
              pos=(900, 300),
-             name='Warrior',
+             name='warrior',
              team='red')
         Unit(groups=[self.all_sprites, self.units],
              pos=(800, 300),
-             name='Warrior',
+             name='warrior',
              team='red')
 
         Unit(groups=[self.all_sprites, self.units],
