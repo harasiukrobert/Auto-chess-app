@@ -1,0 +1,22 @@
+{
+  "warrior": {
+    "name": "Warrior",
+    "cost": 3,
+    "icon": null
+  },
+  "archer": {
+    "name": "Archer",
+    "cost": 3,
+    "icon": null
+  },
+  "lancer": {
+    "name": "Lancer",
+    "cost": 4,
+    "icon": null
+  },
+  "monk": {
+    "name": "Monk",
+    "cost": 5,
+    "icon": null
+  }
+}

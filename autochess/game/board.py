@@ -17,23 +17,26 @@ class Board:
         # round state helpers
         self.current_round = 1
         self._planning_snapshot = None  # stores unit layout and purchases for retry
-        self._enemy_snapshot = None     # stores enemy layout before combat to carry forward
+        self._enemy_snapshot = None  # stores enemy layout before combat to carry forward
 
-           # Note: no initial user (blue) units are spawned.
-           # Players will place units manually via the shop using spawn_blue_unit.
+        # Gold tracking
+        self.gold = 10  # Starting gold
 
-        #team2
+        # Note: no initial user (blue) units are spawned.
+        # Players will place units manually via the shop using spawn_blue_unit.
+
+        # team2
         Unit(groups=[self.all_sprites, self.units],
              pos=(1000, 300),
-             name='Warrior',
+             name='warrior',
              team='red')
         Unit(groups=[self.all_sprites, self.units],
              pos=(900, 300),
-             name='Warrior',
+             name='warrior',
              team='red')
         Unit(groups=[self.all_sprites, self.units],
              pos=(800, 300),
-             name='Warrior',
+             name='warrior',
              team='red')
 
         Unit(groups=[self.all_sprites, self.units],
@@ -51,12 +54,6 @@ class Board:
              name='archer',
              team='red')
 
-
-
-
-
-
-
         self.hex_center_pos = hex_center
 
         # Draw hex grid behind other sprites
@@ -65,7 +62,7 @@ class Board:
             rows=6,
             center_pos=self.hex_center_pos,
             group=self.all_sprites,
-            units = self.units,
+            units=self.units,
             layer=Layer['Positions']
         )
         self.setup()
@@ -88,7 +85,6 @@ class Board:
             }
             for u in self.units if getattr(u, 'team', None) == 'red'
         ]
-
 
     def setup(self):
         self.hex_manager.generate()
@@ -128,7 +124,7 @@ class Board:
                 tree_layer = tmx_data.get_layer_by_name(layer)
                 for x, y, _ in tree_layer.tiles():
                     file_name = choice([f for f in ['Tree1', 'Tree2', 'Tree3', 'Tree4']])
-                    pixelsize_two = 256 if file_name == 'Tree1' or file_name=='Tree2' else 192
+                    pixelsize_two = 256 if file_name == 'Tree1' or file_name == 'Tree2' else 192
                     surfs = import_img_two_diff_sizes(f'files/tiles/{file_name}.png', 192, pixelsize_two)
                     k = randrange(len(surfs)) if surfs else 0
                     surfs = surfs[k:] + surfs[:k]
@@ -141,17 +137,18 @@ class Board:
                     offset_x = (w - tile_w) // 2
                     offset_y = h - tile_h
 
-                    Animate(surfs,(base_x - offset_x, base_y - offset_y), self.all_sprites, Layer[layer])
+                    Animate(surfs, (base_x - offset_x, base_y - offset_y), self.all_sprites, Layer[layer])
 
             if layer == 'Rock':
                 tree_layer = tmx_data.get_layer_by_name(layer)
                 for x, y, _ in tree_layer.tiles():
-                    file_name = choice([f for f in ['Water Rocks_01', 'Water Rocks_02', 'Water Rocks_03', 'Water Rocks_04']])
+                    file_name = choice(
+                        [f for f in ['Water Rocks_01', 'Water Rocks_02', 'Water Rocks_03', 'Water Rocks_04']])
                     surfs = import_img(f'files/tiles/{file_name}.png', 64)
                     k = randrange(len(surfs)) if surfs else 0
                     surfs = surfs[k:] + surfs[:k]
 
-                    Animate(surfs,(x * tile_w, y * tile_h), self.all_sprites, Layer[layer])
+                    Animate(surfs, (x * tile_w, y * tile_h), self.all_sprites, Layer[layer])
 
             if layer == 'Bushes':
                 tree_layer = tmx_data.get_layer_by_name(layer)
@@ -169,7 +166,7 @@ class Board:
                     offset_x = (w - tile_w) // 2
                     offset_y = h - tile_h
 
-                    Animate(surfs,(base_x - offset_x, base_y - offset_y), self.all_sprites, Layer[layer])
+                    Animate(surfs, (base_x - offset_x, base_y - offset_y), self.all_sprites, Layer[layer])
 
     def run(self):
         # ensure occupancy is initialized once grid generated
