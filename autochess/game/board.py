@@ -229,8 +229,8 @@ class Board:
                 self._reset_unit_state(new_u)
                 recreated.append({'name': 'warrior', 'pos': pos})
 
-        # update baseline for next progression step
         self._enemy_round_base = recreated
+        self.hex_manager.initialize_occupancy()
 
     def restore_planning_layout(self):
         """Restore unit positions to last snapshot (used on loss retry)."""
@@ -344,7 +344,57 @@ class CameraGroup(pygame.sprite.Group):
         super().__init__()
         self.display_surf = pygame.display.get_surface()
 
+    def _draw_hp_bar(self, sprite):
+        """Rysuje pasek HP nad daną jednostką."""
+        if not (hasattr(sprite, 'hp') and hasattr(sprite, 'max_hp') and getattr(sprite, 'alive', True)):
+            return
+
+        max_hp = max(1, sprite.max_hp)
+        ratio = max(0, min(sprite.hp / max_hp, 1))
+
+        # Szerokość dopasowana do jednostki (lekko mniejsza niż sprite)
+        base_width = sprite.rect.width
+        bar_width = int(base_width * 0.9)
+        bar_width = max(30, min(bar_width, 80))
+        bar_height = 5
+
+        bar_x = sprite.rect.centerx - bar_width // 2
+        # Pasek przesunięty wyżej względem sprite'a (top - 40)
+        bar_y = sprite.rect.top + 40
+
+        bg_rect = pygame.Rect(bar_x, bar_y, bar_width, bar_height)
+
+        # Kolor wypełnienia zależny od drużyny i poziomu HP
+        if hasattr(sprite, 'team') and sprite.team == 'red':
+            # AI – czerwony pasek, od jasnego do ciemnego odcienia w zależności od HP
+            if ratio > 0.5:
+                fill_color = (220, 60, 60)
+            elif ratio > 0.2:
+                fill_color = (200, 40, 40)
+            else:
+                fill_color = (150, 20, 20)
+        else:
+            # Gracz / inne – niebieski pasek, jaśniejszy przy wysokim HP
+            if ratio > 0.5:
+                fill_color = (50, 150, 255)
+            elif ratio > 0.2:
+                fill_color = (40, 110, 220)
+            else:
+                fill_color = (20, 70, 150)
+
+        # Tło (ciemne) + wypełnienie
+        pygame.draw.rect(self.display_surf, (20, 20, 20), bg_rect)
+
+        fg_width = int(bar_width * ratio)
+        if fg_width > 0:
+            fg_rect = pygame.Rect(bar_x, bar_y, fg_width, bar_height)
+            pygame.draw.rect(self.display_surf, fill_color, fg_rect)
+
+        # Wspólna, cienka czarna ramka dla wszystkich jednostek
+        pygame.draw.rect(self.display_surf, (0, 0, 0), bg_rect, 1)
+
     def custom_draw(self):
+        # Najpierw rysujemy wszystkie sprite'y warstwami
         for layer in Layer.values():
             for sprite in self.sprites():
                 if layer == sprite.z:
@@ -362,3 +412,8 @@ class CameraGroup(pygame.sprite.Group):
                     #     hitbox_b_surf = pygame.Surface((sprite.hitbox_b.width, sprite.hitbox_b.height))
                     #     hitbox_b_surf.fill('blue')
                     #     self.display_surf.blit(hitbox_b_surf, sprite.hitbox_b)
+
+        # Na końcu osobno rysujemy paski HP dla jednostek, żeby były na wierzchu
+        for sprite in self.sprites():
+            if sprite.z == Layer['Units']:
+                self._draw_hp_bar(sprite)
