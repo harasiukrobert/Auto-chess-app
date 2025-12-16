@@ -102,7 +102,7 @@ class HexSprite(pygame.sprite.Sprite):
 class HexGridManager:
     """Menedżer siatki heksagonalnej"""
 
-    def __init__(self, cols, rows, center_pos, group, units, layer):
+    def __init__(self, cols, rows, center_pos, group, units, layer, allow_enemy_drag: bool = False):
         self.cols = cols
         self.rows = rows
         self.center_pos = center_pos
@@ -111,6 +111,9 @@ class HexGridManager:
         self.hexes = []
         self.units = units
         self.selected_unit = None
+        # When False (default), enemy (red) units cannot be dragged in planning.
+        # Can be enabled for custom modes without removing existing functionality.
+        self.allow_enemy_drag = allow_enemy_drag
 
         self.wave_radius = 0
         self.max_dist = 0
@@ -258,6 +261,9 @@ class HexGridManager:
             # start drag
             for sprite in self.units:
                 if not hasattr(sprite, 'hitbox'):
+                    continue
+                # Disallow dragging enemy (red) units unless enabled
+                if getattr(sprite, 'team', None) == 'red' and not self.allow_enemy_drag:
                     continue
                 if sprite.hitbox.collidepoint(mouse_pos):
                     self.selected_unit = sprite

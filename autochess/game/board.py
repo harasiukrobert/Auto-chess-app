@@ -13,7 +13,7 @@ from .units import Unit
 
 
 class Board:
-    def __init__(self, hex_center=(640, 360)):
+    def __init__(self, hex_center=(640, 360), allow_enemy_drag: bool = False):
         self.all_sprites = CameraGroup()
         self.units = pygame.sprite.Group()
         # round state helpers
@@ -31,6 +31,8 @@ class Board:
         self.gold = int(self.rounds.starting_gold)
 
         self.hex_center_pos = hex_center
+        # Config: allow dragging enemy (red) units during planning
+        self.allow_enemy_drag = bool(allow_enemy_drag)
 
         # Draw hex grid behind other sprites based on Round 1
         r1_size = self.rounds.get_board_size(1)
@@ -40,7 +42,8 @@ class Board:
             center_pos=self.hex_center_pos,
             group=self.all_sprites,
             units=self.units,
-            layer=Layer['Positions']
+            layer=Layer['Positions'],
+            allow_enemy_drag=self.allow_enemy_drag,
         )
         self.setup()
         # initialize round 1 contents (grid + player start + enemies)
@@ -172,9 +175,17 @@ class Board:
             center_pos=self.hex_center_pos,
             group=self.all_sprites,
             units=self.units,
-            layer=Layer['Positions']
+            layer=Layer['Positions'],
+            allow_enemy_drag=self.allow_enemy_drag,
         )
         self.hex_manager.generate()
+
+    def set_allow_enemy_drag(self, enabled: bool):
+        """Enable or disable dragging enemy (red) units during planning for the current game."""
+        self.allow_enemy_drag = bool(enabled)
+        # Propagate to current grid manager
+        if hasattr(self, 'hex_manager') and self.hex_manager:
+            self.hex_manager.allow_enemy_drag = self.allow_enemy_drag
 
     def _spawn_batch(self, specs, team: str):
         # Spawn exactly one unit per item using explicit hex coordinates (r,c).
