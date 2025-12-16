@@ -348,6 +348,23 @@ class Game:
                 if self.phase == 'COMBAT':
                     self.speed_ui.draw()
 
+                # Draw current round label at top center
+                try:
+                    # Lazy-init a font once
+                    if not hasattr(self, '_round_font') or self._round_font is None:
+                        self._round_font = pygame.font.SysFont(None, 64)
+                    label = f"ROUND {getattr(self.board, 'current_round', 1)}"
+                    text_surf = self._round_font.render(label, True, COLOR_TEXT)
+                    w, _h = self.screen.get_size()
+                    text_rect = text_surf.get_rect(midtop=(w // 2, 10))
+                    # Subtle shadow for readability
+                    shadow = self._round_font.render(label, True, (0, 0, 0))
+                    shadow_rect = shadow.get_rect(midtop=(text_rect.centerx, text_rect.top + 2))
+                    self.screen.blit(shadow, shadow_rect)
+                    self.screen.blit(text_surf, text_rect)
+                except Exception:
+                    pass
+
                 # Round end detection during combat
                 if self.phase == 'COMBAT' and self.board.hex_manager.is_combat_active():
                     blue_alive, red_alive = self.board.team_alive_counts()
