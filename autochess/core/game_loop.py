@@ -353,8 +353,12 @@ class Game:
                         else:
                             # Loss: restore last planning layout to retry
                             self.board.restore_from_pre_planning_snapshot()
-                            # Respawn enemies per current round configuration
-                            self.board.respawn_current_round_enemies()
+                            # Rebuild enemies from pre-combat snapshot to original positions
+                            try:
+                                self.board.rebuild_enemies_from_snapshot(include_extras=False, round_num=self.board.current_round)
+                            except Exception:
+                                # Fallback to round config if snapshot missing
+                                self.board.respawn_current_round_enemies()
                             # Placeholder: reverse purchases from snapshot
                             # TODO: rollback buys stored in snapshot
                         self.phase = 'PLANNING'
