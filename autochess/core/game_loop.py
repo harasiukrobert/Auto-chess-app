@@ -6,6 +6,7 @@ import pygame
 from autochess.game.board import Board
 from autochess.ui.background import \
     BackgroundStatic  # static background helper
+from autochess.ui.end_screen import EndScreen
 from autochess.ui.menu import Menu
 from autochess.ui.settings import SettingsScreen
 from autochess.ui.shop import Shop
@@ -45,6 +46,11 @@ class Game:
         self.clock = pygame.time.Clock()
         # Turn-based phases inside PLAY
         self.phase = 'PLANNING'  # 'PLANNING' | 'COMBAT'
+        # End screen UI (created lazily later)
+        self.end_screen = EndScreen(
+            screen=self.screen,
+            colors={"text": COLOR_TEXT, "highlight": COLOR_HIGHLIGHT, "subtle": COLOR_SUBTLE},
+        )
 
         # Shop overlay (planning only)
         self.shop = Shop(
@@ -204,6 +210,12 @@ class Game:
                         self.state = "PLAY"
                         # switch to play music
                         self._ensure_play_music(play_music_path, self.volume)
+                        # Ensure Round 1 is applied (grid, player start, enemies)
+                        try:
+                            self.board.current_round = 1
+                            self.board.apply_round(1, initial=True)
+                        except Exception:
+                            pass
                     elif action == "settings":
                         self.state = "SETTINGS"
                         # ensure menu music is playing while in settings
@@ -282,23 +294,59 @@ class Game:
                         self.board.hex_manager.toggle_combat()  # back to planning
                         if player_won:
                             # Advance round, reset units and add new enemies
-                            self.board.current_round += 1
-                            self.board.reset_units_to_initial()
-                            self.board.add_enemies_for_round(self.board.current_round)
-                            # Grant gold reward for winning the round
-                            self.board.gold += 5
+                            prev_round = self.board.current_round
+                            next_round = prev_round + 1
+                            # Award reward for completed round
+                            try:
+                                self.board.gold += int(self.board.get_round_reward(prev_round))
+                            except Exception:
+                                pass
+                            # Check if there is a next round
+                            if self.board.rounds.has_round(next_round):
+                                self.board.current_round = next_round
+                                # keep player's current roster (baseline updated by snapshot during planning)
+                                self.board.reset_units_to_initial()
+                                # Apply next round config (grid + enemies)
+                                self.board.apply_round(self.board.current_round, initial=False)
+                            else:
+                                # No more rounds: show end screen
+                                self.state = "END"
                         else:
                             # Loss: restore last planning layout to retry
                             self.board.restore_planning_layout()
-                            # Rebuild enemies strictly from snapshot positions (no extras)
-                            self.board.rebuild_enemies_from_snapshot(include_extras=False,
-                                                                     round_num=self.board.current_round)
+                            # Respawn enemies per current round configuration
+                            self.board.respawn_current_round_enemies()
                             # Placeholder: reverse purchases from snapshot
                             # TODO: rollback buys stored in snapshot
                         self.phase = 'PLANNING'
 
             pygame.display.update()
             self.clock.tick(FPS)
+
+            # END state loop handling
+            if self.state == "END":
+                # Simple event loop for end screen within main loop
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        sys.exit(0)
+                    action = self.end_screen.handle_event(event)
+                    if action == 'menu':
+                        # Reset board round number to 1 and return to menu
+                        try:
+                            self.board.current_round = 1
+                            self.board.apply_round(1, initial=True)
+                            # Reset gold to starting value for a fresh run
+                            self.board.gold = int(self.board.rounds.starting_gold)
+                        except Exception:
+                            pass
+                        self.state = "MENU"
+                        break
+                    elif action == 'exit':
+                        sys.exit(0)
+                # Draw menu background and end screen overlay
+                self.menu_bg.draw()
+                self.end_screen.draw()
+                pygame.display.update()
 
 
 if __name__ == "__main__":

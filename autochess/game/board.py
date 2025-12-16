@@ -1,3 +1,4 @@
+import os
 from random import choice, randrange
 
 from pytmx.util_pygame import load_pygame
@@ -6,6 +7,7 @@ from autochess.utils.config import *
 from config.setting import *
 
 from .hex_board import HexGridManager
+from .rounds import RoundManager
 from .sprites import Animate, Generic
 from .units import Unit
 
@@ -19,53 +21,27 @@ class Board:
         self._planning_snapshot = None  # stores unit layout and purchases for retry
         self._enemy_snapshot = None  # stores enemy layout before combat to carry forward
 
-        # Gold tracking
-        self.gold = 10  # Starting gold
+        # Rounds configuration
+        self.rounds = RoundManager(os.path.join('config', 'rounds.json'))
 
-        # Note: no initial user (blue) units are spawned.
-        # Players will place units manually via the shop using spawn_blue_unit.
-
-        # team2
-        Unit(groups=[self.all_sprites, self.units],
-             pos=(1000, 300),
-             name='warrior',
-             team='red')
-        Unit(groups=[self.all_sprites, self.units],
-             pos=(900, 300),
-             name='warrior',
-             team='red')
-        Unit(groups=[self.all_sprites, self.units],
-             pos=(800, 300),
-             name='warrior',
-             team='red')
-
-        Unit(groups=[self.all_sprites, self.units],
-             pos=(1100, 200),
-             name='lancer',
-             team='red')
-
-        Unit(groups=[self.all_sprites, self.units],
-             pos=(1000, 200),
-             name='monk',
-             team='red')
-
-        Unit(groups=[self.all_sprites, self.units],
-             pos=(1100, 200),
-             name='archer',
-             team='red')
+        # Gold tracking (from rounds config)
+        self.gold = int(self.rounds.starting_gold)
 
         self.hex_center_pos = hex_center
 
-        # Draw hex grid behind other sprites
+        # Draw hex grid behind other sprites based on Round 1
+        r1_size = self.rounds.get_board_size(1)
         self.hex_manager = HexGridManager(
-            cols=9,
-            rows=6,
+            cols=r1_size.get('cols', 9),
+            rows=r1_size.get('rows', 6),
             center_pos=self.hex_center_pos,
             group=self.all_sprites,
             units=self.units,
             layer=Layer['Positions']
         )
         self.setup()
+        # initialize round 1 contents (grid + player start + enemies)
+        self.apply_round(self.current_round, initial=True)
         # store initial positions/specs for reset (blue team)
         self._initial_positions = {u: (u.rect.centerx, u.rect.centery) for u in self.units}
         self._blue_initial_specs = [
@@ -77,7 +53,7 @@ class Board:
         ]
         # current round baseline for blue units, updated each planning snapshot
         self._blue_round_base = list(self._blue_initial_specs)
-        # baseline enemy list (red team) captured from initial board
+        # baseline enemy list (red team) captured from current round
         self._enemy_round_base = [
             {
                 'name': u.name,
@@ -177,6 +153,76 @@ class Board:
         self.all_sprites.custom_draw()
         self.all_sprites.update()
 
+    # --- Round config application ---
+    def _apply_board_size(self, cols: int, rows: int):
+        # Remove previous hex sprites from group
+        if hasattr(self, 'hex_manager') and self.hex_manager and self.hex_manager.hexes:
+            for hx in list(self.hex_manager.hexes):
+                try:
+                    hx.kill()
+                except Exception:
+                    pass
+        # Create new grid manager
+        self.hex_manager = HexGridManager(
+            cols=cols,
+            rows=rows,
+            center_pos=self.hex_center_pos,
+            group=self.all_sprites,
+            units=self.units,
+            layer=Layer['Positions']
+        )
+        self.hex_manager.generate()
+
+    def _spawn_batch(self, specs, team: str):
+        # Spawn exactly one unit per item using explicit hex coordinates (r,c).
+        # If a target cell is invalid or occupied, fall back to side-preference placement.
+        prefer_top = (team == 'red')
+        for item in specs or []:
+            name = item.get('name')
+            r_exact = item.get('r')
+            c_exact = item.get('c')
+            u = Unit(groups=[self.all_sprites, self.units], pos=(0, 0), name=name, team=team)
+            placed = False
+            try:
+                if r_exact is not None and c_exact is not None:
+                    r_val = int(r_exact)
+                    c_val = int(c_exact)
+                    target_hex = None
+                    for hx in self.hex_manager.hexes:
+                        if hx.r == r_val and hx.c == c_val:
+                            target_hex = hx
+                            break
+                    if target_hex and self.hex_manager.is_hex_free(target_hex):
+                        placed = self.hex_manager.assign_unit_to_hex(u, target_hex)
+            except Exception:
+                placed = False
+            if not placed:
+                placed = self.hex_manager.place_unit_on_free_hex(u, prefer_top=prefer_top)
+            if not placed:
+                u.kill()
+
+    def apply_round(self, round_num: int, initial: bool = False):
+        cfg = self.rounds.get_round(round_num) or {}
+        size = self.rounds.get_board_size(round_num)
+        # Apply board size
+        self._apply_board_size(size.get('cols', 9), size.get('rows', 6))
+        # On initial round, clear all units; otherwise keep player units
+        if initial:
+            for u in list(self.units):
+                u.kill()
+            # spawn player starting units (round 1 only)
+            pstart = self.rounds.get_player_start()
+            self._spawn_batch(pstart, team='blue')
+        else:
+            # ensure all blue units snap to nearest hexes in the new grid
+            self.hex_manager.initialize_occupancy()
+        # (Re)spawn enemies per config for this round
+        for u in list(self.units):
+            if getattr(u, 'team', None) == 'red':
+                u.kill()
+        enemies = self.rounds.get_enemies(round_num)
+        self._spawn_batch(enemies, team='red')
+
     # --- Round helpers ---
     def snapshot_planning_layout(self):
         """Save current unit layout and placeholder purchases for retry."""
@@ -260,38 +306,15 @@ class Board:
         self.hex_manager.initialize_occupancy()
 
     def add_enemies_for_round(self, round_num: int):
-        """Rebuild enemies from last snapshot/base and add extras for scaling."""
-        # choose snapshot if available, else baseline
-        base = self._enemy_snapshot if self._enemy_snapshot is not None else self._enemy_round_base
-        # remove all current red units
-        for u in list(self.units):
-            if getattr(u, 'team', None) == 'red':
-                u.kill()
-        # recreate base enemies
-        recreated = []
-        for spec in base:
-            new_u = Unit(groups=[self.all_sprites, self.units], pos=spec['pos'], name=spec['name'], team='red')
-            # Treat stored position as center, not topleft
-            new_u.rect.center = spec['pos']
-            new_u.sync_pos_from_rect()
-            new_u.hitbox = new_u.rect.copy().inflate(-new_u.rect.width * 0.7, -new_u.rect.height * 0.7)
-            self._reset_unit_state(new_u)
-            recreated.append({'name': spec['name'], 'pos': spec['pos']})
-        # add extras based on round number
-        extra_count = max(0, round_num - 1)
-        for i in range(extra_count):
-            pos = (1100 - i * 60, 220 + (i % 2) * 80)
-            new_u = Unit(groups=[self.all_sprites, self.units], pos=pos, name='warrior', team='red')
-            # Center-based placement for consistency
-            new_u.rect.center = pos
-            new_u.sync_pos_from_rect()
-            new_u.hitbox = new_u.rect.copy().inflate(-new_u.rect.width * 0.7, -new_u.rect.height * 0.7)
-            self._reset_unit_state(new_u)
-            recreated.append({'name': 'warrior', 'pos': pos})
-        # update base for next round progression
-        self._enemy_round_base = recreated
-        # refresh occupancy after enemies
-        self.hex_manager.initialize_occupancy()
+        """Deprecated: now driven by rounds config. Kept for compatibility."""
+        self.apply_round(round_num, initial=False)
+
+    def respawn_current_round_enemies(self):
+        """Respawn enemies strictly from current round config (used on loss)."""
+        self.apply_round(self.current_round, initial=False)
+
+    def get_round_reward(self, round_num: int) -> int:
+        return self.rounds.get_reward(round_num)
 
     def team_alive_counts(self):
         blue = sum(1 for u in self.units if getattr(u, 'team', None) == 'blue' and u.alive)
