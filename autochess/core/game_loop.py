@@ -11,6 +11,7 @@ from autochess.ui.end_screen import EndScreen
 from autochess.ui.menu import Menu
 from autochess.ui.settings import SettingsScreen
 from autochess.ui.shop import Shop
+from autochess.ui.speed_control import SpeedControl
 from config.setting import (COLOR_BG, COLOR_HIGHLIGHT, COLOR_SUBTLE,
                             COLOR_TEXT, DEFAULT_VOLUME, FPS, MUSIC_PATH,
                             SCREEN_HEIGHT, SCREEN_WIDTH, title_size)
@@ -117,7 +118,28 @@ class Game:
             radius=6,
         )
 
+        # Speed control (combat sim speed)
+        self.speed_ui = SpeedControl(
+            screen=self.screen,
+            on_change=self._on_speed_change,
+            colors={
+                "bg": (30, 30, 35),
+                "border": COLOR_SUBTLE,
+                "text": COLOR_TEXT,
+                "hover": (60, 60, 80),
+                "active": COLOR_HIGHLIGHT,
+            },
+        )
+
         self.startgame()
+
+    def _on_speed_change(self, value: float):
+        """Apply speed change to current board's hex manager (combat sim speed)."""
+        try:
+            if hasattr(self.board, 'hex_manager') and self.board.hex_manager:
+                self.board.hex_manager.set_sim_speed(float(value))
+        except Exception:
+            pass
 
     def _shop_spawn_unit(self, name: str, pos):
         """Spawn a blue unit via Board, return the instance for drag selection."""
@@ -210,6 +232,8 @@ class Game:
         # update UI controls with new screen
         if hasattr(self, 'advance_btn'):
             self.advance_btn.screen = self.screen
+        if hasattr(self, 'speed_ui'):
+            self.speed_ui.screen = self.screen
 
     def startgame(self):
         # path for PLAY music
@@ -296,6 +320,9 @@ class Game:
                     # route mouse events to shop only in planning phase
                     if self.phase == 'PLANNING':
                         _ = self.shop.handle_event(event)
+                    # Speed control only in COMBAT phase
+                    if self.phase == 'COMBAT':
+                        _ = self.speed_ui.handle_event(event)
 
             # Draw per state
             if self.state == "MENU":
@@ -317,6 +344,9 @@ class Game:
                     self.shop.draw()
                     # Draw the advance-to-combat button (UI component)
                     self.advance_btn.draw()
+                # Draw speed control only during COMBAT phase
+                if self.phase == 'COMBAT':
+                    self.speed_ui.draw()
 
                 # Round end detection during combat
                 if self.phase == 'COMBAT' and self.board.hex_manager.is_combat_active():

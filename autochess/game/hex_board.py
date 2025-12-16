@@ -129,6 +129,22 @@ class HexGridManager:
         self._drag_prev_center = None
         # previous hex key to revert precisely back to original hex
         self._drag_prev_hex_key = None
+        # Simulation speed control (combat only)
+        self.sim_speed = 1.0
+        self._sim_fraction_accum = 0.0
+
+    def set_sim_speed(self, value: float):
+        """Set simulation speed multiplier for combat updates."""
+        try:
+            v = float(value)
+        except Exception:
+            v = 1.0
+        # clamp to sensible range
+        if v < 0.1:
+            v = 0.1
+        if v > 10.0:
+            v = 10.0
+        self.sim_speed = v
 
     def generate(self):
         """Generuj siatkę heksów"""
@@ -346,8 +362,18 @@ class HexGridManager:
         from autochess.game.units import Unit
         all_units = [u for u in self.units if isinstance(u, Unit) and u.alive]
 
-        for unit in all_units:
-            unit.combat_update(all_units)
+        # Determine how many combat logic steps to run this frame based on sim_speed
+        steps = int(self.sim_speed)
+        self._sim_fraction_accum += (self.sim_speed - steps)
+        if self._sim_fraction_accum >= 1.0:
+            steps += 1
+            self._sim_fraction_accum -= 1.0
+        if steps < 1:
+            steps = 1
+
+        for _ in range(steps):
+            for unit in all_units:
+                unit.combat_update(all_units)
 
     # placement used by spawners to ensure one unit per hex
     def place_unit_on_free_hex(self, unit, prefer_top=True):

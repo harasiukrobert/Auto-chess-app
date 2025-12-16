@@ -156,6 +156,18 @@ class Board:
             self.hex_manager.initialize_occupancy()
             self._occ_init_done = True
         self.hex_manager.update()
+        # Apply sim speed to units only during active combat; otherwise keep 1x
+        active_speed = 1.0
+        try:
+            if self.hex_manager.is_combat_active():
+                active_speed = float(getattr(self.hex_manager, 'sim_speed', 1.0))
+        except Exception:
+            active_speed = 1.0
+        for u in self.units:
+            try:
+                u.sim_speed = active_speed
+            except Exception:
+                pass
         self.all_sprites.custom_draw()
         self.all_sprites.update()
 
