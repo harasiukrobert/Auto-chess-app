@@ -233,6 +233,8 @@ class Game:
                         try:
                             self.board.current_round = 1
                             self.board.apply_round(1, initial=True)
+                            # Start-of-round planning snapshot (gold + roster) for loss rollback
+                            self.board.save_pre_planning_snapshot()
                         except Exception:
                             pass
                     elif action == "settings":
@@ -274,9 +276,9 @@ class Game:
                         elif event.key == pygame.K_TAB:
                             # Toggle combat only from planning
                             if self.phase == 'PLANNING':
-                                # snapshot layout before fight (for retry on loss)
-                                self.board.snapshot_planning_layout()
-                                # snapshot enemies so next round starts with same set
+                                # Freeze baseline roster for carry-over on win
+                                self.board.finalize_planning_baseline()
+                                # (Optional) snapshot enemies; not required for rollback
                                 self.board.snapshot_enemy_layout()
                                 self.phase = 'COMBAT'
                                 self.board.hex_manager.toggle_combat()
@@ -285,7 +287,7 @@ class Game:
                         result = self.advance_btn.handle_event(event)
                         if result == "clicked":
                             # Same behavior as pressing TAB
-                            self.board.snapshot_planning_layout()
+                            self.board.finalize_planning_baseline()
                             self.board.snapshot_enemy_layout()
                             self.phase = 'COMBAT'
                             self.board.hex_manager.toggle_combat()
@@ -340,12 +342,17 @@ class Game:
                                 self.board.reset_units_to_initial()
                                 # Apply next round config (grid + enemies)
                                 self.board.apply_round(self.board.current_round, initial=False)
+                                # New planning phase begins: capture snapshot for potential rollback on loss
+                                try:
+                                    self.board.save_pre_planning_snapshot()
+                                except Exception:
+                                    pass
                             else:
                                 # No more rounds: show end screen
                                 self.state = "END"
                         else:
                             # Loss: restore last planning layout to retry
-                            self.board.restore_planning_layout()
+                            self.board.restore_from_pre_planning_snapshot()
                             # Respawn enemies per current round configuration
                             self.board.respawn_current_round_enemies()
                             # Placeholder: reverse purchases from snapshot

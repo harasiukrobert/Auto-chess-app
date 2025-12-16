@@ -20,6 +20,9 @@ class Board:
         self.current_round = 1
         self._planning_snapshot = None  # stores unit layout and purchases for retry
         self._enemy_snapshot = None  # stores enemy layout before combat to carry forward
+        # Snapshot taken at the START of each planning phase to allow full rollback on loss
+        # Includes player gold and complete blue roster (names + positions).
+        self._pre_planning_snapshot = None
 
         # Rounds configuration
         self.rounds = RoundManager(os.path.join('config', 'rounds.json'))
@@ -225,13 +228,30 @@ class Board:
 
     # --- Round helpers ---
     def snapshot_planning_layout(self):
-        """Save current unit layout and placeholder purchases for retry."""
+        """Deprecated partial snapshot kept for backward compatibility.
+        Previously stored positions keyed by unit objects. No longer used for rollback.
+        """
         self._planning_snapshot = {
             'positions': {u: (u.rect.centerx, u.rect.centery) for u in self.units if u.alive},
-            # shop placeholders:
-            'purchases': []  # TODO: fill with buy data when shop is implemented
+            'purchases': []
         }
-        # Update blue round baseline so post-win reset reflects current roster
+
+    def save_pre_planning_snapshot(self):
+        """Capture gold and full blue roster at the start of planning.
+        This snapshot is used to rollback the player's state on a loss,
+        effectively refunding all current-round purchases and placements.
+        """
+        blue_specs = [
+            {'name': u.name, 'pos': (u.rect.centerx, u.rect.centery)}
+            for u in self.units if getattr(u, 'team', None) == 'blue'
+        ]
+        self._pre_planning_snapshot = {
+            'gold': int(self.gold),
+            'blue_specs': blue_specs,
+        }
+
+    def finalize_planning_baseline(self):
+        """Freeze current blue roster as the baseline carried into next round on win."""
         self._blue_round_base = [
             {'name': u.name, 'pos': (u.rect.centerx, u.rect.centery)}
             for u in self.units if getattr(u, 'team', None) == 'blue'
@@ -278,16 +298,29 @@ class Board:
         self._enemy_round_base = recreated
         self.hex_manager.initialize_occupancy()
 
-    def restore_planning_layout(self):
-        """Restore unit positions to last snapshot (used on loss retry)."""
-        if not self._planning_snapshot:
+    def restore_from_pre_planning_snapshot(self):
+        """Fully restore blue roster and gold to the snapshot from planning start."""
+        snap = self._pre_planning_snapshot
+        if not snap:
             return
-        for u, pos in self._planning_snapshot.get('positions', {}).items():
-            if u.alive:
-                u.rect.center = pos
-                u.sync_pos_from_rect()
-                u.hitbox = u.rect.copy().inflate(-u.rect.width * 0.7, -u.rect.height * 0.7)
-                self._reset_unit_state(u)
+        # Restore gold (refund purchases)
+        try:
+            self.gold = int(snap.get('gold', self.gold))
+        except Exception:
+            pass
+        # Remove all current blue units
+        for u in list(self.units):
+            if getattr(u, 'team', None) == 'blue':
+                u.kill()
+        # Recreate blue units from snapshot
+        for spec in snap.get('blue_specs', []):
+            new_u = Unit(groups=[self.all_sprites, self.units], pos=spec['pos'], name=spec['name'], team='blue')
+            new_u.rect.center = spec['pos']
+            new_u.sync_pos_from_rect()
+            new_u.hitbox = new_u.rect.copy().inflate(-new_u.rect.width * 0.7, -new_u.rect.height * 0.7)
+            self._reset_unit_state(new_u)
+        # Refresh occupancy after rebuild
+        self.hex_manager.initialize_occupancy()
 
     def reset_units_to_initial(self):
         """Rebuild player (blue) units to the latest planning baseline for the next round."""
