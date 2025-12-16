@@ -4,6 +4,7 @@ import sys
 import pygame
 
 from autochess.game.board import Board
+from autochess.ui.advance_button import PlanningAdvanceButton
 from autochess.ui.background import \
     BackgroundStatic  # static background helper
 from autochess.ui.end_screen import EndScreen
@@ -101,6 +102,21 @@ class Game:
         except Exception:
             pass
 
+        # Planning phase advance button (UI component)
+        self.advance_btn = PlanningAdvanceButton(
+            screen=self.screen,
+            label="FIGHT!",
+            colors={
+                "bg": (180, 42, 42),
+                "hover": (200, 60, 60),
+                "border": COLOR_HIGHLIGHT,
+                "text": COLOR_TEXT,
+            },
+            size=(220, 56),
+            margin=16,
+            radius=6,
+        )
+
         self.startgame()
 
     def _shop_spawn_unit(self, name: str, pos):
@@ -191,6 +207,9 @@ class Game:
             screen=self.screen, image_path="files/ui/bg_archer.png", overlay_alpha=28
         )
         # settings_screen will rebuild its internal scaled modal on next draw if needed.
+        # update UI controls with new screen
+        if hasattr(self, 'advance_btn'):
+            self.advance_btn.screen = self.screen
 
     def startgame(self):
         # path for PLAY music
@@ -261,6 +280,17 @@ class Game:
                                 self.board.snapshot_enemy_layout()
                                 self.phase = 'COMBAT'
                                 self.board.hex_manager.toggle_combat()
+                    # Handle planning button click before routing to shop
+                    if self.phase == 'PLANNING':
+                        result = self.advance_btn.handle_event(event)
+                        if result == "clicked":
+                            # Same behavior as pressing TAB
+                            self.board.snapshot_planning_layout()
+                            self.board.snapshot_enemy_layout()
+                            self.phase = 'COMBAT'
+                            self.board.hex_manager.toggle_combat()
+                            # Skip sending this click to the shop
+                            continue
                     # route mouse events to shop only in planning phase
                     if self.phase == 'PLANNING':
                         _ = self.shop.handle_event(event)
@@ -283,6 +313,8 @@ class Game:
                 if self.phase == 'PLANNING':
                     # Draw shop UI above the board during planning
                     self.shop.draw()
+                    # Draw the advance-to-combat button (UI component)
+                    self.advance_btn.draw()
 
                 # Round end detection during combat
                 if self.phase == 'COMBAT' and self.board.hex_manager.is_combat_active():
