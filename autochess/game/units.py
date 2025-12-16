@@ -167,6 +167,13 @@ class Unit(pygame.sprite.Sprite):
         self.rect = self.image.get_rect(topleft=pos)
         self.z = z
         self.hitbox = self.rect.copy().inflate(-self.rect.width * 0.7, -self.rect.height * 0.7)
+        # Simulation speed (set by board depending on combat state)
+        self.sim_speed = 1.0
+        # fractional accumulators for timing tied to frames
+        self._sim_attack_cd_accum = 0.0
+        self._sim_heal_cd_accum = 0.0
+        self._sim_shot_accum = 0.0
+        self._sim_heal_action_accum = 0.0
 
     def import_assets(self):
         """Importuj animacje jednostki"""
@@ -400,7 +407,8 @@ class Unit(pygame.sprite.Sprite):
         else:
             current_speed = self.anim_speed
 
-        self.index += current_speed
+        # Scale animation speed with simulation speed
+        self.index += current_speed * max(0.1, float(getattr(self, 'sim_speed', 1.0)))
 
         current_anim = self.animations[self.status]
         if len(current_anim) == 0:
@@ -425,7 +433,11 @@ class Unit(pygame.sprite.Sprite):
         self.image = frame
 
         if self.pending_shot:
-            self.shot_delay -= 1
+            # Scale action delay with sim speed using accumulator
+            self._sim_shot_accum += max(0.1, float(getattr(self, 'sim_speed', 1.0)))
+            while self._sim_shot_accum >= 1.0 and self.shot_delay > 0:
+                self.shot_delay -= 1
+                self._sim_shot_accum -= 1.0
             if self.shot_delay <= 0:
                 if self.shot_target and self.shot_target.alive:
                     if self.is_ranged:
@@ -436,7 +448,10 @@ class Unit(pygame.sprite.Sprite):
                 self.shot_target = None
 
         if self.pending_heal:
-            self.heal_action_delay -= 1
+            self._sim_heal_action_accum += max(0.1, float(getattr(self, 'sim_speed', 1.0)))
+            while self._sim_heal_action_accum >= 1.0 and self.heal_action_delay > 0:
+                self.heal_action_delay -= 1
+                self._sim_heal_action_accum -= 1.0
             if self.heal_action_delay <= 0:
                 if self.heal_target and self.heal_target.alive:
                     old_hp = self.heal_target.hp
@@ -452,11 +467,18 @@ class Unit(pygame.sprite.Sprite):
         if not self.alive:
             return
 
+        # Scale cooldowns with sim speed using accumulators
         if self.attack_cooldown > 0:
-            self.attack_cooldown -= 1
+            self._sim_attack_cd_accum += max(0.1, float(getattr(self, 'sim_speed', 1.0)))
+            while self._sim_attack_cd_accum >= 1.0 and self.attack_cooldown > 0:
+                self.attack_cooldown -= 1
+                self._sim_attack_cd_accum -= 1.0
 
         if self.heal_cooldown > 0:
-            self.heal_cooldown -= 1
+            self._sim_heal_cd_accum += max(0.1, float(getattr(self, 'sim_speed', 1.0)))
+            while self._sim_heal_cd_accum >= 1.0 and self.heal_cooldown > 0:
+                self.heal_cooldown -= 1
+                self._sim_heal_cd_accum -= 1.0
 
         if self.is_healer:
             wounded_ally = self.find_wounded_ally(all_units)

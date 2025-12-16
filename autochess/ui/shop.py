@@ -1,6 +1,7 @@
 import json
 import os
 import random
+
 import pygame
 
 
@@ -59,8 +60,7 @@ class Shop:
         self.rect = self._compute_rect()
         self.button_rects = []
 
-        self.unit_cost = 1
-        self.reroll_cost = 1
+        self.reroll_cost = 2
         self.reroll_rect = None
         self.bar_rect = None
 
@@ -179,8 +179,10 @@ class Shop:
                     if brect.collidepoint(mx, my) and idx < len(self.offers):
                         name = self.offers[idx]
                         current_gold = self.on_get_gold() if callable(self.on_get_gold) else 0
-                        if current_gold >= self.unit_cost:
-                            if callable(self.on_deduct_gold) and self.on_deduct_gold(self.unit_cost):
+                        # Determine per-unit cost from units_data, fallback to self.unit_cost
+                        cost = self._get_unit_cost(name)
+                        if current_gold >= cost:
+                            if callable(self.on_deduct_gold) and self.on_deduct_gold(cost):
                                 if callable(self.on_spawn):
                                     return self.on_spawn(name, (mx, my))
         return None
@@ -312,3 +314,14 @@ class Shop:
 
     def reroll_free(self):
         self._roll_offers(initial=False)
+
+    # ----------------------------------------------------------------------------------
+    # Helpers
+    # ----------------------------------------------------------------------------------
+    def _get_unit_cost(self, name: str) -> int:
+        try:
+            data = self.units_data.get(name, {})
+            cost = int(data.get('cost', 1))
+            return cost if cost > 0 else 1
+        except Exception:
+            return 1

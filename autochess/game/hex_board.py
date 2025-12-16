@@ -102,7 +102,7 @@ class HexSprite(pygame.sprite.Sprite):
 class HexGridManager:
     """Menedżer siatki heksagonalnej"""
 
-    def __init__(self, cols, rows, center_pos, group, units, layer):
+    def __init__(self, cols, rows, center_pos, group, units, layer, allow_enemy_drag: bool = False):
         self.cols = cols
         self.rows = rows
         self.center_pos = center_pos
@@ -111,6 +111,9 @@ class HexGridManager:
         self.hexes = []
         self.units = units
         self.selected_unit = None
+        # When False (default), enemy (red) units cannot be dragged in planning.
+        # Can be enabled for custom modes without removing existing functionality.
+        self.allow_enemy_drag = allow_enemy_drag
 
         self.wave_radius = 0
         self.max_dist = 0
@@ -126,6 +129,22 @@ class HexGridManager:
         self._drag_prev_center = None
         # previous hex key to revert precisely back to original hex
         self._drag_prev_hex_key = None
+        # Simulation speed control (combat only)
+        self.sim_speed = 1.0
+        self._sim_fraction_accum = 0.0
+
+    def set_sim_speed(self, value: float):
+        """Set simulation speed multiplier for combat updates."""
+        try:
+            v = float(value)
+        except Exception:
+            v = 1.0
+        # clamp to sensible range
+        if v < 0.1:
+            v = 0.1
+        if v > 10.0:
+            v = 10.0
+        self.sim_speed = v
 
     def generate(self):
         """Generuj siatkę heksów"""
@@ -259,6 +278,9 @@ class HexGridManager:
             for sprite in self.units:
                 if not hasattr(sprite, 'hitbox'):
                     continue
+                # Disallow dragging enemy (red) units unless enabled
+                if getattr(sprite, 'team', None) == 'red' and not self.allow_enemy_drag:
+                    continue
                 if sprite.hitbox.collidepoint(mouse_pos):
                     self.selected_unit = sprite
                     self._drag_prev_center = sprite.rect.center
@@ -340,8 +362,18 @@ class HexGridManager:
         from autochess.game.units import Unit
         all_units = [u for u in self.units if isinstance(u, Unit) and u.alive]
 
-        for unit in all_units:
-            unit.combat_update(all_units)
+        # Determine how many combat logic steps to run this frame based on sim_speed
+        steps = int(self.sim_speed)
+        self._sim_fraction_accum += (self.sim_speed - steps)
+        if self._sim_fraction_accum >= 1.0:
+            steps += 1
+            self._sim_fraction_accum -= 1.0
+        if steps < 1:
+            steps = 1
+
+        for _ in range(steps):
+            for unit in all_units:
+                unit.combat_update(all_units)
 
     # placement used by spawners to ensure one unit per hex
     def place_unit_on_free_hex(self, unit, prefer_top=True):
