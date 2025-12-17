@@ -44,7 +44,7 @@ class EndScreen:
         overlay.fill((10, 10, 16, 200))
         self.screen.blit(overlay, (0, 0))
         # Title
-        title_surf = self.font_title.render('Victory! Game Complete', True, self.color_text)
+        title_surf = self.font_title.render('Victory!', True, self.color_text)
         self.screen.blit(title_surf, title_surf.get_rect(center=self.title_pos))
         # Buttons
         for rect, label in ((self.btn_menu, 'Return to Menu'), (self.btn_exit, 'Exit Game')):

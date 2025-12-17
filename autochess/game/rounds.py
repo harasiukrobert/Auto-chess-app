@@ -1,40 +1,134 @@
-import json
-import os
 from typing import Any, Dict, List, Optional
 
-DEFAULT_CONFIG = {
-    "starting_gold": 10,
+# Embedded rounds configuration (formerly config/rounds.json)
+DEFAULT_CONFIG: Dict[str, Any] = {
+    "starting_gold": 2,
     "rounds": [
         {
-            "number": 1,
-            "board": {"cols": 7, "rows": 5},
+            "board": {"cols": 3, "rows": 3},
             "player_start": [
-                {"name": "warrior", "count": 1},
-                {"name": "archer", "count": 1}
+                {"name": "warrior", "r": 2, "c": 1}
             ],
             "enemies": [
-                {"name": "warrior", "count": 2}
+                {"name": "archer", "r": 0, "c": 1}
             ],
             "reward_gold": 5
         },
         {
-            "number": 2,
-            "board": {"cols": 8, "rows": 6},
+            "board": {"cols": 3, "rows": 3},
+            "player_start": [
+                {"name": "warrior", "r": 2, "c": 1}
+            ],
             "enemies": [
-                {"name": "warrior", "count": 2},
-                {"name": "archer", "count": 1}
+                {"name": "archer", "r": 0, "c": 1, "lvl": 2}
+            ],
+            "reward_gold": 5
+        },
+        {
+            "board": {"cols": 3, "rows": 3},
+            "enemies": [
+                {"name": "warrior", "r": 0, "c": 0},
+                {"name": "warrior", "r": 0, "c": 2}
             ],
             "reward_gold": 6
         },
         {
-            "number": 3,
-            "board": {"cols": 9, "rows": 6},
+            "board": {"cols": 5, "rows": 5},
             "enemies": [
-                {"name": "warrior", "count": 2},
-                {"name": "archer", "count": 1},
-                {"name": "lancer", "count": 1}
+                {"name": "warrior", "r": 0, "c": 1},
+                {"name": "warrior", "r": 0, "c": 3},
+                {"name": "archer",  "r": 1, "c": 2}
             ],
             "reward_gold": 7
+        },
+        {
+            "board": {"cols": 5, "rows": 5},
+            "enemies": [
+                {"name": "warrior", "r": 0, "c": 1},
+                {"name": "lancer",  "r": 0, "c": 2},
+                {"name": "warrior", "r": 0, "c": 3},
+                {"name": "archer",  "r": 1, "c": 2}
+            ],
+            "reward_gold": 8
+        },
+        {
+            "board": {"cols": 7, "rows": 5},
+            "enemies": [
+                {"name": "warrior", "r": 0, "c": 2},
+                {"name": "lancer",  "r": 0, "c": 3},
+                {"name": "warrior", "r": 0, "c": 4},
+                {"name": "archer",  "r": 1, "c": 1},
+                {"name": "archer",  "r": 1, "c": 5}
+            ],
+            "reward_gold": 9
+        },
+        {
+            "board": {"cols": 7, "rows": 5},
+            "enemies": [
+                {"name": "warrior", "r": 0, "c": 2},
+                {"name": "warrior", "r": 0, "c": 4},
+                {"name": "monk",    "r": 1, "c": 3},
+                {"name": "archer",  "r": 1, "c": 1},
+                {"name": "archer",  "r": 1, "c": 5}
+            ],
+            "reward_gold": 10
+        },
+        {
+            "board": {"cols": 9, "rows": 6},
+            "enemies": [
+                {"name": "warrior", "r": 0, "c": 2},
+                {"name": "lancer",  "r": 0, "c": 3},
+                {"name": "warrior", "r": 0, "c": 4},
+                {"name": "lancer",  "r": 0, "c": 5},
+                {"name": "warrior", "r": 0, "c": 6},
+                {"name": "archer",  "r": 1, "c": 2},
+                {"name": "archer",  "r": 1, "c": 6}
+            ],
+            "reward_gold": 11
+        },
+        {
+            "board": {"cols": 9, "rows": 6},
+            "enemies": [
+                {"name": "warrior", "r": 0, "c": 1},
+                {"name": "warrior", "r": 0, "c": 3},
+                {"name": "warrior", "r": 0, "c": 5},
+                {"name": "warrior", "r": 0, "c": 7},
+                {"name": "monk",    "r": 1, "c": 3},
+                {"name": "monk",    "r": 1, "c": 5},
+                {"name": "archer",  "r": 2, "c": 2},
+                {"name": "archer",  "r": 2, "c": 6}
+            ],
+            "reward_gold": 12
+        },
+        {
+            "board": {"cols": 9, "rows": 6},
+            "enemies": [
+                {"name": "lancer",  "r": 0, "c": 1},
+                {"name": "warrior", "r": 0, "c": 3},
+                {"name": "warrior", "r": 0, "c": 5},
+                {"name": "lancer",  "r": 0, "c": 7},
+                {"name": "monk",    "r": 1, "c": 4},
+                {"name": "archer",  "r": 1, "c": 2},
+                {"name": "archer",  "r": 1, "c": 6}
+            ],
+            "reward_gold": 13
+        },
+        {
+            "board": {"cols": 9, "rows": 6},
+            "enemies": [
+                {"name": "warrior", "r": 0, "c": 1},
+                {"name": "lancer",  "r": 0, "c": 2},
+                {"name": "warrior", "r": 0, "c": 3},
+                {"name": "lancer",  "r": 0, "c": 4},
+                {"name": "warrior", "r": 0, "c": 5},
+                {"name": "lancer",  "r": 0, "c": 6},
+                {"name": "monk",    "r": 1, "c": 3},
+                {"name": "monk",    "r": 1, "c": 5},
+                {"name": "archer",  "r": 2, "c": 2},
+                {"name": "archer",  "r": 2, "c": 4},
+                {"name": "archer",  "r": 2, "c": 6}
+            ],
+            "reward_gold": 15
         }
     ]
 }
@@ -42,37 +136,19 @@ DEFAULT_CONFIG = {
 
 class RoundManager:
     """Loads and provides round configurations.
-
-    Expected JSON format (config/rounds.json):
-    {
-      "starting_gold": 10,
-      "rounds": [
-        {"number": 1,
-         "board": {"cols": 7, "rows": 5},
-         "player_start": [{"name": "warrior", "count": 1}],
-         "enemies": [{"name": "warrior", "count": 2}],
-         "reward_gold": 5}
-      ]
-    }
     """
 
-    def __init__(self, config_path: str):
-        self.config_path = config_path
+    def __init__(self):
         self._config: Dict[str, Any] = {}
         self._rounds_by_number: Dict[int, Dict[str, Any]] = {}
         self._load()
 
     def _load(self):
-        cfg = None
-        try:
-            with open(self.config_path, 'r') as f:
-                cfg = json.load(f)
-        except Exception:
-            # Fallback to defaults if file missing or invalid
-            cfg = DEFAULT_CONFIG
-        self._config = cfg or DEFAULT_CONFIG
+        # Always use embedded configuration
+        cfg = DEFAULT_CONFIG
+        self._config = cfg
         rounds: List[Dict[str, Any]] = self._config.get("rounds", [])
-        self._rounds_by_number = {int(r.get("number", i + 1)): r for i, r in enumerate(rounds)}
+        self._rounds_by_number = {i + 1: r for i, r in enumerate(rounds)}
 
     @property
     def starting_gold(self) -> int:

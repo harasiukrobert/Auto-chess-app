@@ -324,6 +324,23 @@ class Game:
                     if self.phase == 'COMBAT':
                         _ = self.speed_ui.handle_event(event)
 
+                elif self.state == "END":
+                    # Handle end screen interactions here so events aren't drained earlier
+                    action = self.end_screen.handle_event(event)
+                    if action == 'menu':
+                        try:
+                            # Reset to a fresh run and go back to MENU
+                            self.board.current_round = 1
+                            self.board.apply_round(1, initial=True)
+                            self.board.gold = int(self.board.rounds.starting_gold)
+                        except Exception:
+                            pass
+                        self.state = "MENU"
+                        # ensure menu music is active after returning
+                        self._ensure_play_music(menu_music_path, self.volume)
+                    elif action == 'exit':
+                        sys.exit(0)
+
             # Draw per state
             if self.state == "MENU":
                 # draw archer background and menu
@@ -408,35 +425,20 @@ class Game:
                                 self.board.respawn_current_round_enemies()
                             # Placeholder: reverse purchases from snapshot
                             # TODO: rollback buys stored in snapshot
+                            # New planning cycle begins after loss: capture snapshot so future losses
+                            # roll back to this restored state (including levels/positions)
+                            try:
+                                self.board.save_pre_planning_snapshot()
+                            except Exception:
+                                pass
                         self.phase = 'PLANNING'
+            elif self.state == "END":
+                # Draw menu background and end screen overlay during END state
+                self.menu_bg.draw()
+                self.end_screen.draw()
 
             pygame.display.update()
             self.clock.tick(FPS)
-
-            # END state loop handling
-            if self.state == "END":
-                # Simple event loop for end screen within main loop
-                for event in pygame.event.get():
-                    if event.type == pygame.QUIT:
-                        sys.exit(0)
-                    action = self.end_screen.handle_event(event)
-                    if action == 'menu':
-                        # Reset board round number to 1 and return to menu
-                        try:
-                            self.board.current_round = 1
-                            self.board.apply_round(1, initial=True)
-                            # Reset gold to starting value for a fresh run
-                            self.board.gold = int(self.board.rounds.starting_gold)
-                        except Exception:
-                            pass
-                        self.state = "MENU"
-                        break
-                    elif action == 'exit':
-                        sys.exit(0)
-                # Draw menu background and end screen overlay
-                self.menu_bg.draw()
-                self.end_screen.draw()
-                pygame.display.update()
 
 
 if __name__ == "__main__":

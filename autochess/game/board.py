@@ -1,4 +1,3 @@
-import os
 from random import choice, randrange
 
 from pytmx.util_pygame import load_pygame
@@ -24,8 +23,8 @@ class Board:
         # Includes player gold and complete blue roster (names + positions).
         self._pre_planning_snapshot = None
 
-        # Rounds configuration
-        self.rounds = RoundManager(os.path.join('config', 'rounds.json'))
+        # Rounds configuration (embedded)
+        self.rounds = RoundManager()
 
         # Gold tracking (from rounds config)
         self.gold = int(self.rounds.starting_gold)
@@ -53,7 +52,8 @@ class Board:
         self._blue_initial_specs = [
             {
                 'name': u.name,
-                'pos': (u.rect.centerx, u.rect.centery)
+                'pos': (u.rect.centerx, u.rect.centery),
+                'lvl': int(getattr(u, 'level', 1))
             }
             for u in self.units if getattr(u, 'team', None) == 'blue'
         ]
@@ -63,7 +63,8 @@ class Board:
         self._enemy_round_base = [
             {
                 'name': u.name,
-                'pos': (u.rect.centerx, u.rect.centery)
+                'pos': (u.rect.centerx, u.rect.centery),
+                'lvl': int(getattr(u, 'level', 1))
             }
             for u in self.units if getattr(u, 'team', None) == 'red'
         ]
@@ -205,9 +206,10 @@ class Board:
         prefer_top = (team == 'red')
         for item in specs or []:
             name = item.get('name')
+            lvl = int(item.get('lvl', 1)) if isinstance(item, dict) else 1
             r_exact = item.get('r')
             c_exact = item.get('c')
-            u = Unit(groups=[self.all_sprites, self.units], pos=(0, 0), name=name, team=team)
+            u = Unit(groups=[self.all_sprites, self.units], pos=(0, 0), name=name, team=team, level=lvl)
             placed = False
             try:
                 if r_exact is not None and c_exact is not None:
@@ -265,7 +267,7 @@ class Board:
         effectively refunding all current-round purchases and placements.
         """
         blue_specs = [
-            {'name': u.name, 'pos': (u.rect.centerx, u.rect.centery)}
+            {'name': u.name, 'pos': (u.rect.centerx, u.rect.centery), 'lvl': int(getattr(u, 'level', 1))}
             for u in self.units if getattr(u, 'team', None) == 'blue'
         ]
         self._pre_planning_snapshot = {
@@ -276,14 +278,14 @@ class Board:
     def finalize_planning_baseline(self):
         """Freeze current blue roster as the baseline carried into next round on win."""
         self._blue_round_base = [
-            {'name': u.name, 'pos': (u.rect.centerx, u.rect.centery)}
+            {'name': u.name, 'pos': (u.rect.centerx, u.rect.centery), 'lvl': int(getattr(u, 'level', 1))}
             for u in self.units if getattr(u, 'team', None) == 'blue'
         ]
 
     def snapshot_enemy_layout(self):
         """Save current enemy configuration to carry forward to next round."""
         self._enemy_snapshot = [
-            {'name': u.name, 'pos': (u.rect.centerx, u.rect.centery)}
+            {'name': u.name, 'pos': (u.rect.centerx, u.rect.centery), 'lvl': int(getattr(u, 'level', 1))}
             for u in self.units if getattr(u, 'team', None) == 'red'
         ]
 
@@ -300,23 +302,24 @@ class Board:
         recreated = []
         # recreate snapshot enemies at their center positions
         for spec in base:
-            new_u = Unit(groups=[self.all_sprites, self.units], pos=spec['pos'], name=spec['name'], team='red')
+            lvl = int(spec.get('lvl', 1))
+            new_u = Unit(groups=[self.all_sprites, self.units], pos=spec['pos'], name=spec['name'], team='red', level=lvl)
             new_u.rect.center = spec['pos']
             new_u.sync_pos_from_rect()
             new_u.hitbox = new_u.rect.copy().inflate(-new_u.rect.width * 0.7, -new_u.rect.height * 0.7)
             self._reset_unit_state(new_u)
-            recreated.append({'name': spec['name'], 'pos': spec['pos']})
+            recreated.append({'name': spec['name'], 'pos': spec['pos'], 'lvl': lvl})
 
         if include_extras:
             extra_count = max(0, round_num - 1)
             for i in range(extra_count):
                 pos = (1100 - i * 60, 220 + (i % 2) * 80)
-                new_u = Unit(groups=[self.all_sprites, self.units], pos=pos, name='warrior', team='red')
+                new_u = Unit(groups=[self.all_sprites, self.units], pos=pos, name='warrior', team='red', level=1)
                 new_u.rect.center = pos
                 new_u.sync_pos_from_rect()
                 new_u.hitbox = new_u.rect.copy().inflate(-new_u.rect.width * 0.7, -new_u.rect.height * 0.7)
                 self._reset_unit_state(new_u)
-                recreated.append({'name': 'warrior', 'pos': pos})
+                recreated.append({'name': 'warrior', 'pos': pos, 'lvl': 1})
 
         self._enemy_round_base = recreated
         self.hex_manager.initialize_occupancy()
@@ -337,7 +340,8 @@ class Board:
                 u.kill()
         # Recreate blue units from snapshot
         for spec in snap.get('blue_specs', []):
-            new_u = Unit(groups=[self.all_sprites, self.units], pos=spec['pos'], name=spec['name'], team='blue')
+            lvl = int(spec.get('lvl', 1))
+            new_u = Unit(groups=[self.all_sprites, self.units], pos=spec['pos'], name=spec['name'], team='blue', level=lvl)
             new_u.rect.center = spec['pos']
             new_u.sync_pos_from_rect()
             new_u.hitbox = new_u.rect.copy().inflate(-new_u.rect.width * 0.7, -new_u.rect.height * 0.7)
@@ -353,7 +357,8 @@ class Board:
                 u.kill()
         # recreate from round baseline
         for spec in self._blue_round_base:
-            new_u = Unit(groups=[self.all_sprites, self.units], pos=spec['pos'], name=spec['name'], team='blue')
+            lvl = int(spec.get('lvl', 1))
+            new_u = Unit(groups=[self.all_sprites, self.units], pos=spec['pos'], name=spec['name'], team='blue', level=lvl)
             new_u.rect.center = spec['pos']
             new_u.sync_pos_from_rect()
             new_u.hitbox = new_u.rect.copy().inflate(-new_u.rect.width * 0.7, -new_u.rect.height * 0.7)
@@ -471,6 +476,46 @@ class CameraGroup(pygame.sprite.Group):
 
         # Wspólna, cienka czarna ramka dla wszystkich jednostek
         pygame.draw.rect(self.display_surf, (0, 0, 0), bg_rect, 1)
+
+        # Draw level indicator (stars) above the HP bar
+        try:
+            lvl = int(getattr(sprite, 'level', 1))
+        except Exception:
+            lvl = 1
+        if lvl >= 1:
+            # Prefer a symbol that renders on Windows reliably
+            stars_text = '★' * lvl
+            # Try a Windows-friendly symbol font first, fallback to default
+            font = None
+            try:
+                font = pygame.font.SysFont('Segoe UI Symbol', 18)
+            except Exception:
+                try:
+                    font = pygame.font.SysFont(None, 18)
+                except Exception:
+                    font = None
+            if font:
+                star_color = (255, 215, 0)  # gold-like
+                text_surf = font.render(stars_text, True, star_color)
+                text_rect = text_surf.get_rect(midbottom=(sprite.rect.centerx, bg_rect.top - 2))
+
+                # Soft outline/shadow for readability
+                shadow_surf = font.render(stars_text, True, (0, 0, 0))
+                try:
+                    shadow_surf.set_alpha(170)
+                except Exception:
+                    pass
+                offsets = [
+                    (-1, -1), (0, -1), (1, -1),
+                    (-1,  0),           (1,  0),
+                    (-1,  1), (0,  1), (1,  1),
+                ]
+                for ox, oy in offsets:
+                    srect = shadow_surf.get_rect(midbottom=(text_rect.centerx + ox, text_rect.bottom + oy))
+                    self.display_surf.blit(shadow_surf, srect)
+
+                # Foreground
+                self.display_surf.blit(text_surf, text_rect)
 
     def custom_draw(self):
         # Najpierw rysujemy wszystkie sprite'y warstwami
