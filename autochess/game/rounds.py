@@ -6,7 +6,6 @@ DEFAULT_CONFIG = {
     "starting_gold": 10,
     "rounds": [
         {
-            "number": 1,
             "board": {"cols": 7, "rows": 5},
             "player_start": [
                 {"name": "warrior", "count": 1},
@@ -18,7 +17,6 @@ DEFAULT_CONFIG = {
             "reward_gold": 5
         },
         {
-            "number": 2,
             "board": {"cols": 8, "rows": 6},
             "enemies": [
                 {"name": "warrior", "count": 2},
@@ -27,7 +25,6 @@ DEFAULT_CONFIG = {
             "reward_gold": 6
         },
         {
-            "number": 3,
             "board": {"cols": 9, "rows": 6},
             "enemies": [
                 {"name": "warrior", "count": 2},
@@ -72,7 +69,7 @@ class RoundManager:
             cfg = DEFAULT_CONFIG
         self._config = cfg or DEFAULT_CONFIG
         rounds: List[Dict[str, Any]] = self._config.get("rounds", [])
-        self._rounds_by_number = {int(r.get("number", i + 1)): r for i, r in enumerate(rounds)}
+        self._rounds_by_number = {i + 1: r for i, r in enumerate(rounds)}
 
     @property
     def starting_gold(self) -> int:

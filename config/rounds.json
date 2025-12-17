@@ -2,18 +2,26 @@
   "starting_gold": 2,
   "rounds": [
     {
-      "number": 1,
       "board": { "cols": 3, "rows": 3 },
       "player_start": [
         { "name": "warrior", "r": 2, "c": 1 }
       ],
       "enemies": [
-        { "name": "archer", "r": 0, "c": 1 }
+        { "name": "archer", "r": 0, "c": 1}
       ],
       "reward_gold": 5
     },
     {
-      "number": 2,
+      "board": { "cols": 3, "rows": 3 },
+      "player_start": [
+        { "name": "warrior", "r": 2, "c": 1 }
+      ],
+      "enemies": [
+        { "name": "archer", "r": 0, "c": 1, "lvl": 2 }
+      ],
+      "reward_gold": 5
+    },
+    {
       "board": { "cols": 3, "rows": 3 },
       "enemies": [
         { "name": "warrior", "r": 0, "c": 0 },
@@ -22,7 +30,6 @@
       "reward_gold": 6
     },
     {
-      "number": 3,
       "board": { "cols": 5, "rows": 5 },
       "enemies": [
         { "name": "warrior", "r": 0, "c": 1 },
@@ -32,7 +39,6 @@
       "reward_gold": 7
     },
     {
-      "number": 4,
       "board": { "cols": 5, "rows": 5 },
       "enemies": [
         { "name": "warrior", "r": 0, "c": 1 },
@@ -43,7 +49,6 @@
       "reward_gold": 8
     },
     {
-      "number": 5,
       "board": { "cols": 7, "rows": 5 },
       "enemies": [
         { "name": "warrior", "r": 0, "c": 2 },
@@ -55,7 +60,6 @@
       "reward_gold": 9
     },
     {
-      "number": 6,
       "board": { "cols": 7, "rows": 5 },
       "enemies": [
         { "name": "warrior", "r": 0, "c": 2 },
@@ -67,7 +71,6 @@
       "reward_gold": 10
     },
     {
-      "number": 7,
       "board": { "cols": 9, "rows": 6 },
       "enemies": [
         { "name": "warrior", "r": 0, "c": 2 },
@@ -81,7 +84,6 @@
       "reward_gold": 11
     },
     {
-      "number": 8,
       "board": { "cols": 9, "rows": 6 },
       "enemies": [
         { "name": "warrior", "r": 0, "c": 1 },
@@ -96,7 +98,6 @@
       "reward_gold": 12
     },
     {
-      "number": 9,
       "board": { "cols": 9, "rows": 6 },
       "enemies": [
         { "name": "lancer",  "r": 0, "c": 1 },
@@ -110,7 +111,6 @@
       "reward_gold": 13
     },
     {
-      "number": 10,
       "board": { "cols": 9, "rows": 6 },
       "enemies": [
         { "name": "warrior", "r": 0, "c": 1 },

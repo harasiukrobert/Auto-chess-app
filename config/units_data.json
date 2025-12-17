@@ -2,21 +2,25 @@
   "warrior": {
     "name": "Warrior",
     "cost": 3,
-    "icon": null
+    "icon": null,
+    "evolve_multiplier": 1.5
   },
   "archer": {
     "name": "Archer",
     "cost": 3,
-    "icon": null
+    "icon": null,
+    "evolve_multiplier": 1.5
   },
   "lancer": {
     "name": "Lancer",
     "cost": 4,
-    "icon": null
+    "icon": null,
+    "evolve_multiplier": 1.5
   },
   "monk": {
     "name": "Monk",
     "cost": 5,
-    "icon": null
+    "icon": null,
+    "evolve_multiplier": 1.5
   }
 }

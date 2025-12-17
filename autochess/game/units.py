@@ -1,8 +1,35 @@
+import json
 import math
 import os
 
 from autochess.utils.config import *
 from config.setting import *
+
+# Cached evolve multipliers loaded from config/units_data.json
+_EVOLVE_MULTIPLIERS = None
+
+
+def get_evolve_multiplier(unit_name: str) -> float:
+    global _EVOLVE_MULTIPLIERS
+    if _EVOLVE_MULTIPLIERS is None:
+        _EVOLVE_MULTIPLIERS = {}
+        try:
+            with open(os.path.join('config', 'units_data.json'), 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                for k, v in data.items():
+                    try:
+                        _EVOLVE_MULTIPLIERS[k] = float(v.get('evolve_multiplier', 1.5))
+                    except Exception:
+                        _EVOLVE_MULTIPLIERS[k] = 1.5
+        except Exception:
+            # fallback default
+            _EVOLVE_MULTIPLIERS = {
+                'warrior': 1.5,
+                'archer': 1.5,
+                'lancer': 1.5,
+                'monk': 1.5,
+            }
+    return float(_EVOLVE_MULTIPLIERS.get(unit_name, 1.5))
 
 
 class HealEffect(pygame.sprite.Sprite):
@@ -112,12 +139,15 @@ class Projectile(pygame.sprite.Sprite):
 class Unit(pygame.sprite.Sprite):
     """Klasa bazowa dla wszystkich jednostek"""
 
-    def __init__(self, groups, pos, name, team, z=Layer['Units']):
+    def __init__(self, groups, pos, name, team, z=Layer['Units'], level: int = 1):
         super().__init__(groups)
         self.groups_ref = groups
         self.alive = True
 
         stats = UNIT_STATS.get(name, UNIT_STATS['warrior'])
+
+        # Store base stats for level scaling
+        self.base_stats = dict(stats)
 
         self.max_hp = stats['hp']
         self.hp = stats['hp']
@@ -159,6 +189,13 @@ class Unit(pygame.sprite.Sprite):
         self.heal_target = None
         self.heal_action_delay = 0
 
+        # Level/evolution
+        try:
+            self.level = max(1, int(level))
+        except Exception:
+            self.level = 1
+        self.evolve_multiplier = get_evolve_multiplier(self.name)
+
         self.pos = pygame.math.Vector2(pos)
 
         self.import_assets()
@@ -174,6 +211,52 @@ class Unit(pygame.sprite.Sprite):
         self._sim_heal_cd_accum = 0.0
         self._sim_shot_accum = 0.0
         self._sim_heal_action_accum = 0.0
+
+        # Apply initial level scaling
+        if self.level > 1:
+            self._apply_level_scaling(set_full_hp=True)
+
+    def _apply_level_scaling(self, set_full_hp: bool = False):
+        """Recalculate stats based on current level and evolve multiplier.
+        Positive stats are multiplied by multiplier^(level-1).
+        For attack_delay (cooldown), we reduce it by the same factor for snappier upgrades.
+        """
+        scale = (self.evolve_multiplier ** max(0, self.level - 1))
+
+        # HP / damage scale up
+        base_hp = self.base_stats.get('hp', self.max_hp)
+        self.max_hp = int(round(base_hp * scale))
+        if set_full_hp:
+            self.hp = self.max_hp
+        else:
+            # proportionally adjust current hp to new max
+            ratio = max(0.0, min(self.hp / max(1, getattr(self, 'max_hp', base_hp)), 1.0))
+            self.hp = int(round(self.max_hp * ratio))
+
+        # Offensive/utility stats
+        if 'damage' in self.base_stats:
+            self.damage = int(round(self.base_stats['damage'] * scale))
+        # if 'attack_range' in self.base_stats:
+        #     self.attack_range = float(self.base_stats['attack_range'] * scale)
+        # if 'speed' in self.base_stats:
+        #     self.speed = float(self.base_stats['speed'] * scale)
+        if 'projectile_speed' in self.base_stats:
+            self.projectile_speed = float(self.base_stats['projectile_speed'] * scale)
+        if 'heal_amount' in self.base_stats:
+            self.heal_amount = int(round(self.base_stats['heal_amount'] * scale))
+        if 'heal_range' in self.base_stats:
+            self.heal_range = float(self.base_stats['heal_range'] * scale)
+
+        # Make attacks/heals faster with level (reduce delay)
+        # if 'attack_delay' in self.base_stats:
+        #     self.attack_delay = max(10, int(round(self.base_stats['attack_delay'] / scale)))
+        # if 'heal_delay' in self.base_stats:
+        #     self.heal_delay = max(10, int(round(self.base_stats['heal_delay'] / scale)))
+
+    def evolve(self):
+        """Increase unit level by 1 and reapply scaled stats. Restores HP to full."""
+        self.level = int(self.level) + 1
+        self._apply_level_scaling(set_full_hp=True)
 
     def import_assets(self):
         """Importuj animacje jednostki"""

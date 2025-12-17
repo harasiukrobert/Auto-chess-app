@@ -11,6 +11,7 @@ HEX_BORDER_COLOR = (64, 64, 64)
 # Drag colors used during unit dragging (no alpha overlay)
 DRAG_FREE_COLOR = (128, 128, 128, 100)
 DRAG_OCCUPIED_COLOR = (64, 64, 64, 150)
+MERGE_TARGET_COLOR = (60, 180, 75, 160)
 
 
 class HexSprite(pygame.sprite.Sprite):
@@ -290,14 +291,19 @@ class HexGridManager:
                         if v is sprite:
                             self._drag_prev_hex_key = k
                             break
-                    # apply color overrides: occupied vs free
+                    # apply color overrides: occupied vs free; mark merge-eligible targets as green
                     for h in self.hexes:
-                        if self.is_hex_free(h) or self.occupancy.get((h.r, h.c)) is sprite:
+                        occ = self.occupancy.get((h.r, h.c))
+                        if occ is None or occ is sprite:
                             if DRAG_FREE_COLOR is not None:
                                 h.dynamic_color = DRAG_FREE_COLOR
                         else:
-                            if DRAG_OCCUPIED_COLOR is not None:
-                                h.dynamic_color = DRAG_OCCUPIED_COLOR
+                            # check merge eligibility
+                            if self._can_merge(self.selected_unit, occ):
+                                h.dynamic_color = MERGE_TARGET_COLOR
+                            else:
+                                if DRAG_OCCUPIED_COLOR is not None:
+                                    h.dynamic_color = DRAG_OCCUPIED_COLOR
                         h.redraw()
                     break
 
@@ -314,8 +320,14 @@ class HexGridManager:
             if nearest:
                 h = nearest['hex']
                 if self.selected_unit.hitbox.colliderect(h.hitbox):
-                    if (self.is_hex_free(h) or self.occupancy.get((h.r, h.c)) is self.selected_unit):
+                    occ = self.occupancy.get((h.r, h.c))
+                    if (self.is_hex_free(h) or occ is self.selected_unit):
                         placed = self.assign_unit_to_hex(self.selected_unit, h)
+                    else:
+                        # attempt merge when dropping onto occupied hex
+                        if self._can_merge(self.selected_unit, occ):
+                            self._perform_merge(self.selected_unit, occ, h)
+                            placed = True
             if not placed and self._drag_prev_center:
                 # revert to original hex center if known
                 revert_center = self._drag_prev_center
@@ -407,3 +419,43 @@ class HexGridManager:
         self.collision()
         self.set_the_center()
         self.update_combat()
+
+    # --- Merge mechanics ---
+    def _can_merge(self, a, b) -> bool:
+        """Return True if units a and b can merge (same team, name, and level)."""
+        if a is None or b is None:
+            return False
+        if a is b:
+            return False
+        if getattr(a, 'team', None) != getattr(b, 'team', None):
+            return False
+        if getattr(a, 'name', None) != getattr(b, 'name', None):
+            return False
+        try:
+            la = int(getattr(a, 'level', 1))
+            lb = int(getattr(b, 'level', 1))
+        except Exception:
+            return False
+        return la == lb
+
+    def _perform_merge(self, dragged, target, target_hex):
+        """Merge dragged unit into target unit positioned on target_hex.
+        The target evolves; dragged is removed. Target remains on its hex.
+        """
+        # Evolve target
+        if hasattr(target, 'evolve'):
+            target.evolve()
+        # Remove dragged from groups and occupancy
+        if self._drag_prev_hex_key is not None and self.occupancy.get(self._drag_prev_hex_key) is dragged:
+            self.occupancy[self._drag_prev_hex_key] = None
+        try:
+            dragged.kill()
+        except Exception:
+            pass
+        # Ensure target stays assigned to target_hex in occupancy
+        key = (target_hex.r, target_hex.c)
+        self.occupancy[key] = target
+        target.rect.center = target_hex.rect.center
+        if hasattr(target, 'sync_pos_from_rect'):
+            target.sync_pos_from_rect()
+        target.hitbox = target.rect.copy().inflate(-target.rect.width * 0.7, -target.rect.height * 0.7)

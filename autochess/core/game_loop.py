@@ -408,6 +408,12 @@ class Game:
                                 self.board.respawn_current_round_enemies()
                             # Placeholder: reverse purchases from snapshot
                             # TODO: rollback buys stored in snapshot
+                            # New planning cycle begins after loss: capture snapshot so future losses
+                            # roll back to this restored state (including levels/positions)
+                            try:
+                                self.board.save_pre_planning_snapshot()
+                            except Exception:
+                                pass
                         self.phase = 'PLANNING'
 
             pygame.display.update()
