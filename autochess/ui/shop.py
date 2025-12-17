@@ -1,8 +1,8 @@
-import json
 import os
 import random
 
 import pygame
+from autochess.game.units import UNITS_DATA
 
 
 class Shop:
@@ -100,17 +100,8 @@ class Shop:
             return None
 
     def _load_units_data(self):
-        units_data_path = os.path.join('config', 'units_data.json')
-        try:
-            with open(units_data_path, 'r') as f:
-                return json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            return {
-                'warrior': {'name': 'Warrior', 'cost': 3},
-                'archer': {'name': 'Archer', 'cost': 3},
-                'lancer': {'name': 'Lancer', 'cost': 4},
-                'monk': {'name': 'Monk', 'cost': 5}
-            }
+        # Always use embedded configuration from autochess.game.units
+        return UNITS_DATA
 
     def _compute_rect(self):
         w, h = self.screen.get_size()

@@ -1,35 +1,88 @@
-import json
 import math
 import os
 
 from autochess.utils.config import *
 from config.setting import *
 
-# Cached evolve multipliers loaded from config/units_data.json
-_EVOLVE_MULTIPLIERS = None
+# Embedded unit metadata
+# Used for shop costs and evolve multipliers
+UNITS_DATA = {
+    'warrior': {
+        'name': 'Warrior',
+        'cost': 3,
+        'icon': None,
+        'evolve_multiplier': 1.5,
+        # core stats
+        'hp': 25,
+        'damage': 2,
+        'attack_range': 80,
+        'attack_delay': 80,
+        'speed': 2,
+        'is_ranged': False,
+        'anim_speed': 0.10,
+        'attack_anim_speed': 0.10,
+    },
+    'archer': {
+        'name': 'Archer',
+        'cost': 3,
+        'icon': None,
+        'evolve_multiplier': 1.5,
+        # core stats
+        'hp': 15,
+        'damage': 3,
+        'attack_range': 300,
+        'attack_delay': 120,
+        'speed': 1.5,
+        'is_ranged': True,
+        'projectile_speed': 8,
+        'anim_speed': 0.10,
+        'attack_anim_speed': 0.10,
+    },
+    'lancer': {
+        'name': 'Lancer',
+        'cost': 4,
+        'icon': None,
+        'evolve_multiplier': 1.5,
+        # core stats
+        'hp': 20,
+        'damage': 4,
+        'attack_range': 120,
+        'attack_delay': 100,
+        'speed': 1.5,
+        'is_ranged': False,
+        'anim_speed': 0.10,
+        'attack_anim_speed': 0.03,
+    },
+    'monk': {
+        'name': 'Monk',
+        'cost': 5,
+        'icon': None,
+        'evolve_multiplier': 1.5,
+        # core stats
+        'hp': 18,
+        'damage': 1,
+        'attack_range': 80,
+        'attack_delay': 60,
+        'speed': 1.5,
+        'is_ranged': False,
+        'is_healer': True,
+        'heal_amount': 3,
+        'heal_range': 150,
+        'heal_delay': 100,
+        'anim_speed': 0.10,
+        'attack_anim_speed': 0.10,
+    },
+}
 
 
 def get_evolve_multiplier(unit_name: str) -> float:
-    global _EVOLVE_MULTIPLIERS
-    if _EVOLVE_MULTIPLIERS is None:
-        _EVOLVE_MULTIPLIERS = {}
-        try:
-            with open(os.path.join('config', 'units_data.json'), 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                for k, v in data.items():
-                    try:
-                        _EVOLVE_MULTIPLIERS[k] = float(v.get('evolve_multiplier', 1.5))
-                    except Exception:
-                        _EVOLVE_MULTIPLIERS[k] = 1.5
-        except Exception:
-            # fallback default
-            _EVOLVE_MULTIPLIERS = {
-                'warrior': 1.5,
-                'archer': 1.5,
-                'lancer': 1.5,
-                'monk': 1.5,
-            }
-    return float(_EVOLVE_MULTIPLIERS.get(unit_name, 1.5))
+    data = UNITS_DATA.get(unit_name, {})
+    try:
+        return float(data.get('evolve_multiplier', 1.5))
+    except Exception:
+        return 1.5
+
+# All unit stats now live in UNITS_DATA above
 
 
 class HealEffect(pygame.sprite.Sprite):
@@ -144,7 +197,7 @@ class Unit(pygame.sprite.Sprite):
         self.groups_ref = groups
         self.alive = True
 
-        stats = UNIT_STATS.get(name, UNIT_STATS['warrior'])
+        stats = UNITS_DATA.get(name, UNITS_DATA['warrior'])
 
         # Store base stats for level scaling
         self.base_stats = dict(stats)

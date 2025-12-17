@@ -1,4 +1,3 @@
-import os
 from random import choice, randrange
 
 from pytmx.util_pygame import load_pygame
@@ -24,8 +23,8 @@ class Board:
         # Includes player gold and complete blue roster (names + positions).
         self._pre_planning_snapshot = None
 
-        # Rounds configuration
-        self.rounds = RoundManager(os.path.join('config', 'rounds.json'))
+        # Rounds configuration (embedded)
+        self.rounds = RoundManager()
 
         # Gold tracking (from rounds config)
         self.gold = int(self.rounds.starting_gold)
