@@ -253,11 +253,8 @@ class Game:
                         self.state = "PLAY"
                         # switch to play music
                         self._ensure_play_music(play_music_path, self.volume)
-                        # Ensure Round 1 is applied (grid, player start, enemies)
+                        # Round 1 is already applied in Board.__init__(), just save snapshot
                         try:
-                            self.board.current_round = 1
-                            self.board.apply_round(1, initial=True)
-                            # Start-of-round planning snapshot (gold + roster) for loss rollback
                             self.board.save_pre_planning_snapshot()
                         except Exception:
                             pass
@@ -397,6 +394,11 @@ class Game:
                             # Award reward for completed round
                             try:
                                 self.board.gold += int(self.board.get_round_reward(prev_round))
+                            except Exception:
+                                pass
+                            # Give AI the same round reward
+                            try:
+                                self.board._enemy_ai.add_gold(int(self.board.get_round_reward(prev_round)))
                             except Exception:
                                 pass
                             # Check if there is a next round
