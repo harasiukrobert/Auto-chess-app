@@ -2,7 +2,7 @@ from typing import Any, Dict, List, Optional
 
 # Embedded rounds configuration (formerly config/rounds.json)
 DEFAULT_CONFIG: Dict[str, Any] = {
-    "starting_gold": 2,
+    "starting_gold": 3,
     "rounds": [
         {
             "board": {"cols": 3, "rows": 3},

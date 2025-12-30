@@ -29,6 +29,10 @@ class Board:
         # Gold tracking (from rounds config)
         self.gold = int(self.rounds.starting_gold)
 
+        # Initialize enemy AI with same starting gold as player
+        from autochess.ai.enemy_ai import EnemyAI
+        self._enemy_ai = EnemyAI(starting_gold=int(self.rounds.starting_gold))
+
         self.hex_center_pos = hex_center
         # Config: allow dragging enemy (red) units during planning
         self.allow_enemy_drag = bool(allow_enemy_drag)
@@ -200,15 +204,30 @@ class Board:
         if hasattr(self, 'hex_manager') and self.hex_manager:
             self.hex_manager.allow_enemy_drag = self.allow_enemy_drag
 
-    def _spawn_batch(self, specs, team: str):
+    def _spawn_batch(self, specs, team:  str):
+        # For enemy team, use AI placement
+        if team == 'red':
+            from autochess.ai.placement import compute_enemy_placement
+            specs_with_hexes = compute_enemy_placement(specs, self.hex_manager)
+            for item in specs_with_hexes:
+                name = item.get('name')
+                lvl = int(item.get('lvl', 1))
+                target_hex = item.get('hex')
+                u = Unit(groups=[self.all_sprites, self.units], pos=(0, 0), name=name, team=team, level=lvl)
+                if target_hex and self.hex_manager.is_hex_free(target_hex):
+                    self.hex_manager.assign_unit_to_hex(u, target_hex)
+                else:
+                    # Fallback
+                    if not self.hex_manager.place_unit_on_free_hex_in_territory(u, team):
+                        u.kill()
+            return
         # Spawn exactly one unit per item using explicit hex coordinates (r,c).
-        # If a target cell is invalid or occupied, fall back to side-preference placement.
-        prefer_top = (team == 'red')
+        # If a target cell is invalid or occupied, fall back to territory-aware placement.
         for item in specs or []:
-            name = item.get('name')
+            name = item. get('name')
             lvl = int(item.get('lvl', 1)) if isinstance(item, dict) else 1
             r_exact = item.get('r')
-            c_exact = item.get('c')
+            c_exact = item. get('c')
             u = Unit(groups=[self.all_sprites, self.units], pos=(0, 0), name=name, team=team, level=lvl)
             placed = False
             try:
@@ -220,20 +239,23 @@ class Board:
                         if hx.r == r_val and hx.c == c_val:
                             target_hex = hx
                             break
-                    if target_hex and self.hex_manager.is_hex_free(target_hex):
+                    if target_hex and self.hex_manager. is_hex_free(target_hex):
                         placed = self.hex_manager.assign_unit_to_hex(u, target_hex)
             except Exception:
                 placed = False
             if not placed:
-                placed = self.hex_manager.place_unit_on_free_hex(u, prefer_top=prefer_top)
+                # Use territory-aware placement as fallback
+                placed = self.hex_manager.place_unit_on_free_hex_in_territory(u, team)
             if not placed:
                 u.kill()
 
     def apply_round(self, round_num: int, initial: bool = False):
         cfg = self.rounds.get_round(round_num) or {}
         size = self.rounds.get_board_size(round_num)
+
         # Apply board size
         self._apply_board_size(size.get('cols', 9), size.get('rows', 6))
+
         # On initial round, clear all units; otherwise keep player units
         if initial:
             for u in list(self.units):
@@ -244,12 +266,26 @@ class Board:
         else:
             # ensure all blue units snap to nearest hexes in the new grid
             self.hex_manager.initialize_occupancy()
-        # (Re)spawn enemies per config for this round
+
+        # Always kill existing red units (they'll be respawned from AI roster)
         for u in list(self.units):
             if getattr(u, 'team', None) == 'red':
                 u.kill()
-        enemies = self.rounds.get_enemies(round_num)
-        self._spawn_batch(enemies, team='red')
+
+        # Handle enemy units via AI
+        if initial:
+            # First round: reset AI and let it buy fresh
+            self._enemy_ai.reset(starting_gold=int(self.rounds.starting_gold))
+            # AI shops for initial units
+            new_enemies = self._enemy_ai.shop_for_round(round_num)
+            self._spawn_batch(new_enemies, team='red')
+        else:
+            # Subsequent rounds:
+            # 1. AI shops for NEW units (adds to existing roster)
+            new_enemies = self._enemy_ai.shop_for_round(round_num)
+
+            # 2. Respawn the ENTIRE AI roster (all units, not just new ones)
+            self._spawn_batch(self._enemy_ai.roster, team='red')
 
     # --- Round helpers ---
     def snapshot_planning_layout(self):
@@ -397,13 +433,16 @@ class Board:
         u.heal_action_delay = 0
         u.target = None
 
-    def spawn_blue_unit(self, name: str, pos: tuple[int, int]):
-        """Create a new blue unit and place it on the closest free hex.
+    def spawn_blue_unit(self, name: str, pos:  tuple[int, int]):
+        """Create a new blue unit and place it on the closest free hex in player territory.
         Important: Do not add the unit to any group until a free hex is found,
         so it never appears under the shop overlay.
         """
-        # Determine the closest free hex to the click position
-        free_hexes = [hx for hx in self.hex_manager.hexes if self.hex_manager.is_hex_free(hx)]
+        # Determine the closest free hex to the click position WITHIN PLAYER TERRITORY
+        free_hexes = [
+            hx for hx in self.hex_manager.hexes
+            if self.hex_manager. is_hex_free(hx) and self.hex_manager. is_player_territory(hx)
+        ]
         if not free_hexes:
             return None
         chosen_hex = min(
@@ -412,10 +451,10 @@ class Board:
         )
 
         # Create the unit only now, once we know we can place it
-        u = Unit(groups=[self.all_sprites, self.units], pos=chosen_hex.rect.center, name=name, team='blue')
+        u = Unit(groups=[self.all_sprites, self.units], pos=chosen_hex. rect.center, name=name, team='blue')
         u.rect.center = chosen_hex.rect.center
         u.sync_pos_from_rect()
-        u.hitbox = u.rect.copy().inflate(-u.rect.width * 0.7, -u.rect.height * 0.7)
+        u.hitbox = u.rect. copy().inflate(-u.rect.width * 0.7, -u.rect. height * 0.7)
         self._reset_unit_state(u)
 
         # Assign to occupancy map for that hex (guaranteed free)

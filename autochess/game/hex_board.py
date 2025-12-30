@@ -12,6 +12,8 @@ HEX_BORDER_COLOR = (64, 64, 64)
 DRAG_FREE_COLOR = (128, 128, 128, 100)
 DRAG_OCCUPIED_COLOR = (64, 64, 64, 150)
 MERGE_TARGET_COLOR = (60, 180, 75, 160)
+# Enemy territory color (subtle red) - shown when dragging to indicate blocked area
+ENEMY_TERRITORY_COLOR = (200, 60, 60, 120)
 
 
 class HexSprite(pygame.sprite.Sprite):
@@ -147,6 +149,20 @@ class HexGridManager:
             v = 10.0
         self.sim_speed = v
 
+    def is_player_territory(self, hex_sprite) -> bool:
+        """Returns True if hex is in the bottom half (player territory).
+        Player can only place units in their territory (bottom half of the map).
+        """
+        # Bottom half: rows >= rows // 2
+        # For odd row counts, the middle row goes to enemy territory
+        return hex_sprite.r >= (self.rows + 1) // 2
+
+    def is_enemy_territory(self, hex_sprite) -> bool:
+        """Returns True if hex is in the top half (enemy territory).
+        Player cannot place units here.
+        """
+        return hex_sprite.r < (self.rows + 1) // 2
+
     def generate(self):
         """Generuj siatkę heksów"""
         step_x = math.sqrt(3) * HEX_RADIUS + HEX_MARGIN
@@ -271,7 +287,7 @@ class HexGridManager:
         if self.combat_mode:
             return
 
-        mouse_pos = pygame.mouse.get_pos()
+        mouse_pos = pygame. mouse.get_pos()
         press = pygame.mouse.get_pressed()[0]
 
         if self.selected_unit is None and press:
@@ -280,30 +296,38 @@ class HexGridManager:
                 if not hasattr(sprite, 'hitbox'):
                     continue
                 # Disallow dragging enemy (red) units unless enabled
-                if getattr(sprite, 'team', None) == 'red' and not self.allow_enemy_drag:
+                if getattr(sprite, 'team', None) == 'red' and not self. allow_enemy_drag:
                     continue
-                if sprite.hitbox.collidepoint(mouse_pos):
+                if sprite.hitbox. collidepoint(mouse_pos):
                     self.selected_unit = sprite
                     self._drag_prev_center = sprite.rect.center
                     # Remember which hex the unit currently occupies
                     self._drag_prev_hex_key = None
-                    for k, v in self.occupancy.items():
+                    for k, v in self. occupancy.items():
                         if v is sprite:
                             self._drag_prev_hex_key = k
                             break
-                    # apply color overrides: occupied vs free; mark merge-eligible targets as green
+                    # Apply color overrides based on territory and occupancy
+                    # Enemy territory gets red tint, occupied hexes get dark, free player hexes get normal
                     for h in self.hexes:
-                        occ = self.occupancy.get((h.r, h.c))
-                        if occ is None or occ is sprite:
-                            if DRAG_FREE_COLOR is not None:
-                                h.dynamic_color = DRAG_FREE_COLOR
+                        # Check if this hex is in enemy territory (top half)
+                        if self.is_enemy_territory(h):
+                            # Show red tint for enemy territory - player cannot place here
+                            h. dynamic_color = ENEMY_TERRITORY_COLOR
                         else:
-                            # check merge eligibility
-                            if self._can_merge(self.selected_unit, occ):
-                                h.dynamic_color = MERGE_TARGET_COLOR
+                            # Player territory (bottom half) - check occupancy
+                            occ = self.occupancy.get((h.r, h. c))
+                            if occ is None or occ is sprite:
+                                # Free hex or the hex the dragged unit came from
+                                if DRAG_FREE_COLOR is not None:
+                                    h.dynamic_color = DRAG_FREE_COLOR
                             else:
-                                if DRAG_OCCUPIED_COLOR is not None:
-                                    h.dynamic_color = DRAG_OCCUPIED_COLOR
+                                # Check merge eligibility
+                                if self._can_merge(self.selected_unit, occ):
+                                    h.dynamic_color = MERGE_TARGET_COLOR
+                                else:
+                                    if DRAG_OCCUPIED_COLOR is not None:
+                                        h.dynamic_color = DRAG_OCCUPIED_COLOR
                         h.redraw()
                     break
 
@@ -319,7 +343,7 @@ class HexGridManager:
             nearest = self.find_nearest_hex_center(self.selected_unit.rect.center)
             if nearest:
                 h = nearest['hex']
-                if self.selected_unit.hitbox.colliderect(h.hitbox):
+                if self.is_player_territory(h) and self.selected_unit.hitbox.colliderect(h.hitbox):
                     occ = self.occupancy.get((h.r, h.c))
                     if (self.is_hex_free(h) or occ is self.selected_unit):
                         placed = self.assign_unit_to_hex(self.selected_unit, h)
@@ -398,6 +422,26 @@ class HexGridManager:
         else:
             seq = sorted(seq, key=lambda h: -h.r)
         for h in seq:
+            if self.is_hex_free(h):
+                self.assign_unit_to_hex(unit, h)
+                return True
+        return False
+
+    def place_unit_on_free_hex_in_territory(self, unit, team:  str):
+        """Place unit on first free hex within the appropriate territory.
+        Blue units go to player territory (bottom half).
+        Red units go to enemy territory (top half).
+        """
+        if team == 'blue':
+            # Player territory - bottom half, prefer bottom-most rows first
+            valid_hexes = [h for h in self.hexes if self.is_player_territory(h)]
+            valid_hexes = sorted(valid_hexes, key=lambda h: (-h.r, h.c))  # bottom first
+        else:
+            # Enemy territory - top half, prefer top-most rows first
+            valid_hexes = [h for h in self.hexes if self.is_enemy_territory(h)]
+            valid_hexes = sorted(valid_hexes, key=lambda h:  (h.r, h.c))  # top first
+
+        for h in valid_hexes:
             if self.is_hex_free(h):
                 self.assign_unit_to_hex(unit, h)
                 return True
