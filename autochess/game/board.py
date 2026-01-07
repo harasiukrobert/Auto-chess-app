@@ -559,9 +559,12 @@ class CameraGroup(pygame.sprite.Group):
     def custom_draw(self):
         # Najpierw rysujemy wszystkie sprite'y warstwami
         for layer in Layer.values():
-            for sprite in self.sprites():
-                if layer == sprite.z:
-                    self.display_surf.blit(sprite.image, sprite.rect)
+            # Sort sprites by Y coordinate (centery) to handle depth overlapping correctly
+            layer_sprites = [s for s in self.sprites() if getattr(s, 'z', None) == layer]
+            sorted_sprites = sorted(layer_sprites, key=lambda s: s.rect.centery)
+
+            for sprite in sorted_sprites:
+                self.display_surf.blit(sprite.image, sprite.rect)
                     # Debug hitboxów (opcjonalnie):
                     # if layer == Layer['Units']:
                     #     hitbox_surf = pygame.Surface((sprite.hitbox.width, sprite.hitbox.height))
