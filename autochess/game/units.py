@@ -79,7 +79,7 @@ UNITS_DATA = {
         'attack_range': 80,
         'attack_delay': 60,
         'speed': 1.5,
-        'is_ranged': False,
+        'is_ranged': True,
         'is_healer': True,
         'heal_amount': 3,
         'heal_range': 150,
@@ -98,7 +98,7 @@ UNITS_DATA = {
         'attack_range': 250,
         'attack_delay': 100,
         'speed': 1.5,
-        'is_ranged': False,
+        'is_ranged': True,
         'anim_speed': 0.10,
         'attack_anim_speed': 0.10,
     },
@@ -554,7 +554,17 @@ class Unit(pygame.sprite.Sprite):
         dy = target.rect.centery - self.rect.centery
         self.update_facing_direction(dx, dy)
 
-        if self.is_ranged:
+        if self.name == 'witch':
+            self.pending_shot = True
+            self.shot_target = target
+            attack_anim = self.get_attack_animation()
+            # If animations not loaded yet or empty, be safe
+            if self.animations[attack_anim]:
+                anim_length = len(self.animations[attack_anim])
+                self.shot_delay = int(anim_length * 0.7 / self.attack_anim_speed)
+            else:
+                self.shot_delay = 10
+        elif self.is_ranged:
             self.pending_shot = True
             self.shot_target = target
             attack_anim = self.get_attack_animation()
@@ -566,16 +576,6 @@ class Unit(pygame.sprite.Sprite):
             attack_anim = self.get_attack_animation()
             anim_length = len(self.animations[attack_anim])
             self.shot_delay = int(anim_length * 0.8 / self.attack_anim_speed)
-        elif self.name == 'witch':
-            self.pending_shot = True
-            self.shot_target = target
-            attack_anim = self.get_attack_animation()
-            # If animations not loaded yet or empty, be safe
-            if self.animations[attack_anim]:
-                anim_length = len(self.animations[attack_anim])
-                self.shot_delay = int(anim_length * 0.7 / self.attack_anim_speed)
-            else:
-                self.shot_delay = 10
         else:
             target.take_damage(self.damage)
 
@@ -669,11 +669,11 @@ class Unit(pygame.sprite.Sprite):
                 self._sim_shot_accum -= 1.0
             if self.shot_delay <= 0:
                 if self.shot_target and self.shot_target.alive:
-                    if self.is_ranged:
-                        self.shoot_projectile(self.shot_target)
-                    elif self.name == 'witch':
+                    if self.name == 'witch':
                         self.shot_target.take_damage(self.damage)
                         self.spawn_damage_effect(self.shot_target)
+                    elif self.is_ranged:
+                        self.shoot_projectile(self.shot_target)
                     else:
                         self.shot_target.take_damage(self.damage)
                 self.pending_shot = False
