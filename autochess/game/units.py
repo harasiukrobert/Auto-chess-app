@@ -53,6 +53,21 @@ UNITS_DATA = {
         'anim_speed': 0.10,
         'attack_anim_speed': 0.03,
     },
+    'assassin': {
+        'name': 'Assassin',
+        'cost': 1,
+        'icon': None,
+        'evolve_multiplier': 1.5,
+        # core stats
+        'hp': 18,
+        'damage': 5,
+        'attack_range': 30,
+        'attack_delay': 50,
+        'speed': 2.0,
+        'is_ranged': False,
+        'anim_speed': 0.10,
+        'attack_anim_speed': 0.10,
+    },
     'monk': {
         'name': 'Monk',
         'cost': 5,
@@ -69,6 +84,21 @@ UNITS_DATA = {
         'heal_amount': 3,
         'heal_range': 150,
         'heal_delay': 100,
+        'anim_speed': 0.10,
+        'attack_anim_speed': 0.10,
+    },
+    'witch': {
+        'name': 'Witch',
+        'cost': 1,
+        'icon': None,
+        'evolve_multiplier': 1.5,
+        # core stats
+        'hp': 18,
+        'damage': 4,
+        'attack_range': 250,
+        'attack_delay': 100,
+        'speed': 1.5,
+        'is_ranged': False,
         'anim_speed': 0.10,
         'attack_anim_speed': 0.10,
     },
@@ -128,12 +158,58 @@ class HealEffect(pygame.sprite.Sprite):
                 self.kill()
 
 
+class DamageEffect(pygame.sprite.Sprite):
+    """Efekt wizualny ataku wiedźmy"""
+
+    def __init__(self, groups, target, team, z=Layer['Units']):
+        super().__init__(groups)
+        self.target = target
+        self.z = z
+
+        path = f'files/units/{team}_units/witch/spell.png'
+
+        self.frames = []
+        if os.path.exists(path):
+            self.frames = import_img(path, 192)
+
+        self.index = 0
+        self.anim_speed = 0.15
+
+        if self.frames:
+            self.image = self.frames[0]
+        else:
+            self.image = pygame.Surface((64, 64), pygame.SRCALPHA)
+            pygame.draw.circle(self.image, (150, 50, 255, 150), (32, 32), 30)
+
+        self.rect = self.image.get_rect(center=target.rect.center)
+
+    def update(self):
+        if self.target and self.target.alive:
+            self.rect.center = self.target.rect.center
+
+        if self.frames:
+            self.index += self.anim_speed
+
+            if self.index >= len(self.frames):
+                self.kill()
+                return
+
+            self.image = self.frames[int(self.index)]
+        else:
+            self.index += 0.1
+            if self.index >= 10:
+                self.kill()
+
+
 class Projectile(pygame.sprite.Sprite):
     """Klasa dla pocisków (strzały, magiczne pociski itp.)"""
 
-    def __init__(self, groups, start_pos, target, speed=8, z=Layer['Units']):
+    def __init__(self, groups, start_pos, target, unit_name, team, speed=8, z=Layer['Units']):
         super().__init__(groups)
         self.groups_ref = groups
+
+        self.unit_name = unit_name
+        self.team = team
 
         self.pos = pygame.math.Vector2(start_pos)
         self.target = target
@@ -147,20 +223,16 @@ class Projectile(pygame.sprite.Sprite):
 
         self.angle = math.degrees(math.atan2(-self.direction.y, self.direction.x))
 
-        self.original_image = self.create_arrow_image()
+        self.original_image = self.load_projectile_image()
         self.image = pygame.transform.rotate(self.original_image, self.angle)
         self.rect = self.image.get_rect(center=start_pos)
 
         self.hit = False
         self.damage = 1
 
-    def create_arrow_image(self):
-        """Tworzy obrazek strzały"""
-        surf = pygame.Surface((20, 6), pygame.SRCALPHA)
-        pygame.draw.rect(surf, (139, 69, 19), (0, 2, 14, 2))
-        pygame.draw.polygon(surf, (169, 169, 169), [(14, 0), (20, 3), (14, 6)])
-        pygame.draw.polygon(surf, (200, 50, 50), [(0, 0), (4, 3), (0, 6)])
-        return surf
+    def load_projectile_image(self):
+        path = f'files/units/{self.team}_units/{self.unit_name}/bullet.png'
+        return pygame.image.load(path).convert_alpha()
 
     def update(self):
         if self.hit:
@@ -447,6 +519,8 @@ class Unit(pygame.sprite.Sprite):
             groups=[self.groups_ref[0]],
             start_pos=start_pos,
             target=target,
+            unit_name=self.name,
+            team=self.team,
             speed=self.projectile_speed,
             z=Layer['Units']
         )
@@ -456,6 +530,15 @@ class Unit(pygame.sprite.Sprite):
         """Stwórz efekt leczenia na celu"""
         # Add heal effect only to visual group (exclude units group)
         HealEffect(
+            groups=[self.groups_ref[0]],
+            target=target,
+            team=self.team,
+            z=Layer['Units']
+        )
+
+    def spawn_damage_effect(self, target):
+        """Stwórz efekt obrażeń na celu (dla Witch)"""
+        DamageEffect(
             groups=[self.groups_ref[0]],
             target=target,
             team=self.team,
@@ -483,6 +566,16 @@ class Unit(pygame.sprite.Sprite):
             attack_anim = self.get_attack_animation()
             anim_length = len(self.animations[attack_anim])
             self.shot_delay = int(anim_length * 0.8 / self.attack_anim_speed)
+        elif self.name == 'witch':
+            self.pending_shot = True
+            self.shot_target = target
+            attack_anim = self.get_attack_animation()
+            # If animations not loaded yet or empty, be safe
+            if self.animations[attack_anim]:
+                anim_length = len(self.animations[attack_anim])
+                self.shot_delay = int(anim_length * 0.7 / self.attack_anim_speed)
+            else:
+                self.shot_delay = 10
         else:
             target.take_damage(self.damage)
 
@@ -578,6 +671,9 @@ class Unit(pygame.sprite.Sprite):
                 if self.shot_target and self.shot_target.alive:
                     if self.is_ranged:
                         self.shoot_projectile(self.shot_target)
+                    elif self.name == 'witch':
+                        self.shot_target.take_damage(self.damage)
+                        self.spawn_damage_effect(self.shot_target)
                     else:
                         self.shot_target.take_damage(self.damage)
                 self.pending_shot = False

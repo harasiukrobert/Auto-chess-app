@@ -57,7 +57,7 @@ class Game:
         # Shop overlay (planning only)
         self.shop = Shop(
             screen=self.screen,
-            items=['warrior', 'archer', 'lancer', 'monk'],
+            items=['warrior', 'archer', 'lancer', 'monk', 'assassin', 'witch'],
             colors={"bg": (20, 20, 28), "border": COLOR_HIGHLIGHT, "text": COLOR_TEXT},
             on_spawn=self._shop_spawn_unit,
             on_get_gold=self._get_gold,
@@ -148,7 +148,10 @@ class Game:
             # Do NOT auto-select while the mouse is still pressed; avoid jumping to shop click
             # Player can click the unit afterwards to drag it.
             return u
-        except Exception:
+        except Exception as e:
+            print(f"Error spawning unit {name}: {e}")
+            import traceback
+            traceback.print_exc()
             return None
 
     def _get_gold(self):
