@@ -2,12 +2,18 @@ import math
 
 import pygame
 
-HEX_RADIUS = 64
-HEX_MARGIN = 5
+# Hex grid geometry. Keep unit sprites unchanged; only shrink the grid footprint.
+# 0.9 => ~10% smaller hexes.
+HEX_SCALE = 0.9
+BASE_HEX_RADIUS = 64
+BASE_HEX_MARGIN = 5
+HEX_RADIUS = int(round(BASE_HEX_RADIUS * HEX_SCALE))
+HEX_MARGIN = max(0, int(round(BASE_HEX_MARGIN * HEX_SCALE)))
 ANIMATION_SPEED = 0.05
 WAVE_SPEED = 10
 HEX_COLOR = (128, 128, 128, 100)
 HEX_BORDER_COLOR = (64, 64, 64)
+HEX_BORDER_WIDTH = 3
 # Drag colors used during unit dragging (no alpha overlay)
 DRAG_FREE_COLOR = (128, 128, 128, 100)
 DRAG_OCCUPIED_COLOR = (64, 64, 64, 150)
@@ -99,7 +105,11 @@ class HexSprite(pygame.sprite.Sprite):
 
         base_color = self.dynamic_color if self.dynamic_color else HEX_COLOR
         pygame.draw.polygon(self.image, base_color, current_points)
-        pygame.draw.polygon(self.image, HEX_BORDER_COLOR, current_points, 3)
+        pygame.draw.polygon(self.image, HEX_BORDER_COLOR, current_points, HEX_BORDER_WIDTH)
+
+        # Simple anti-aliasing pass for the outline. This doesn't change the
+        # thickness (still controlled by HEX_BORDER_WIDTH) but smooths jagged edges.
+        pygame.draw.aalines(self.image, HEX_BORDER_COLOR, True, current_points)
 
 
 class HexGridManager:
@@ -182,8 +192,8 @@ class HexGridManager:
                 x_base = c * (h_width + HEX_MARGIN)
                 x_offset = (h_width / 2 + HEX_MARGIN / 2) if r % 2 == 1 else 0
 
-                pos_x = start_x + x_base + x_offset
-                pos_y = start_y + (r * (h_height * 0.75 + HEX_MARGIN)) + HEX_RADIUS
+                pos_x = int(round(start_x + x_base + x_offset))
+                pos_y = int(round(start_y + (r * (h_height * 0.75 + HEX_MARGIN)) + HEX_RADIUS))
 
                 hex_sprite = HexSprite(r, c, pos_x, pos_y, HEX_RADIUS, [self.group], self.layer)
 
@@ -263,6 +273,28 @@ class HexGridManager:
             return True
         return False
 
+    def assign_unit_to_hex_animated(self, unit, hex_sprite, frames: int = 10):
+        """Assign unit to hex in occupancy and animate movement to hex center."""
+        key = (hex_sprite.r, hex_sprite.c)
+        # clear any previous assignment of this unit
+        for k, v in self.occupancy.items():
+            if v is unit:
+                self.occupancy[k] = None
+        # set new if free
+        if self.occupancy.get(key) is None:
+            self.occupancy[key] = unit
+            # Only animate if the unit supports it; otherwise fall back to instant.
+            if hasattr(unit, 'start_snap_move'):
+                unit.start_snap_move(hex_sprite.rect.center, frames=frames)
+            else:
+                unit.rect.center = hex_sprite.rect.center
+                if hasattr(unit, 'sync_pos_from_rect'):
+                    unit.sync_pos_from_rect()
+                unit.hitbox = unit.rect.copy().inflate(
+                    -unit.rect.width * 0.7, -unit.rect.height * 0.7)
+            return True
+        return False
+
     def update_shrink_animation(self):
         """Aktualizuj animację zanikania siatki"""
         if not self.shrinking_started:
@@ -300,6 +332,12 @@ class HexGridManager:
                     continue
                 if sprite.hitbox. collidepoint(mouse_pos):
                     self.selected_unit = sprite
+                    # Cancel any ongoing snap animation so drag takes full control
+                    try:
+                        if hasattr(self.selected_unit, '_snap_move_active'):
+                            self.selected_unit._snap_move_active = False
+                    except Exception:
+                        pass
                     self._drag_prev_center = sprite.rect.center
                     # Remember which hex the unit currently occupies
                     self._drag_prev_hex_key = None
@@ -326,8 +364,8 @@ class HexGridManager:
                                 if self._can_merge(self.selected_unit, occ):
                                     h.dynamic_color = MERGE_TARGET_COLOR
                                 else:
-                                    if DRAG_OCCUPIED_COLOR is not None:
-                                        h.dynamic_color = DRAG_OCCUPIED_COLOR
+                                    # Do not grey-out occupied player hexes; leave default color
+                                    h.dynamic_color = None
                         h.redraw()
                     break
 
@@ -346,12 +384,17 @@ class HexGridManager:
                 if self.is_player_territory(h) and self.selected_unit.hitbox.colliderect(h.hitbox):
                     occ = self.occupancy.get((h.r, h.c))
                     if (self.is_hex_free(h) or occ is self.selected_unit):
-                        placed = self.assign_unit_to_hex(self.selected_unit, h)
+                        placed = self.assign_unit_to_hex_animated(self.selected_unit, h, frames=10)
                     else:
                         # attempt merge when dropping onto occupied hex
                         if self._can_merge(self.selected_unit, occ):
                             self._perform_merge(self.selected_unit, occ, h)
                             placed = True
+                        else:
+                            # attempt swap when different type/level
+                            if self._can_swap(self.selected_unit, occ, h):
+                                self._perform_swap(self.selected_unit, occ, h)
+                                placed = True
             if not placed and self._drag_prev_center:
                 # revert to original hex center if known
                 revert_center = self._drag_prev_center
@@ -361,11 +404,14 @@ class HexGridManager:
                         if hx.r == r and hx.c == c:
                             revert_center = hx.rect.center
                             break
-                self.selected_unit.rect.center = revert_center
-                if hasattr(self.selected_unit, 'sync_pos_from_rect'):
-                    self.selected_unit.sync_pos_from_rect()
-                self.selected_unit.hitbox = self.selected_unit.rect.copy().inflate(
-                    -self.selected_unit.rect.width * 0.7, -self.selected_unit.rect.height * 0.7)
+                if hasattr(self.selected_unit, 'start_snap_move'):
+                    self.selected_unit.start_snap_move(revert_center, frames=10)
+                else:
+                    self.selected_unit.rect.center = revert_center
+                    if hasattr(self.selected_unit, 'sync_pos_from_rect'):
+                        self.selected_unit.sync_pos_from_rect()
+                    self.selected_unit.hitbox = self.selected_unit.rect.copy().inflate(
+                        -self.selected_unit.rect.width * 0.7, -self.selected_unit.rect.height * 0.7)
             # clear drag state and color overrides
             for h in self.hexes:
                 if h.dynamic_color is not None:
@@ -385,10 +431,37 @@ class HexGridManager:
                 continue
             # Only snap when not dragging
             if self.selected_unit is None:
-                nearest = self.find_nearest_hex_center(sprite.rect.center)
-                if nearest:
-                    h = nearest['hex']
-                    self.assign_unit_to_hex(sprite, h)
+                # Do not fight active placement animations
+                if hasattr(sprite, 'is_snap_moving') and sprite.is_snap_moving():
+                    continue
+                # If this unit is already assigned to a hex, gently keep it on that hex center
+                assigned_key = None
+                for k, v in self.occupancy.items():
+                    if v is sprite:
+                        assigned_key = k
+                        break
+                if assigned_key is not None:
+                    ar, ac = assigned_key
+                    assigned_hex = None
+                    for hx in self.hexes:
+                        if hx.r == ar and hx.c == ac:
+                            assigned_hex = hx
+                            break
+                    if assigned_hex is not None and sprite.rect.center != assigned_hex.rect.center:
+                        if hasattr(sprite, 'start_snap_move'):
+                            sprite.start_snap_move(assigned_hex.rect.center, frames=6)
+                        else:
+                            sprite.rect.center = assigned_hex.rect.center
+                            if hasattr(sprite, 'sync_pos_from_rect'):
+                                sprite.sync_pos_from_rect()
+                            sprite.hitbox = sprite.rect.copy().inflate(
+                                -sprite.rect.width * 0.7, -sprite.rect.height * 0.7)
+                else:
+                    # Fallback: seed occupancy if missing
+                    nearest = self.find_nearest_hex_center(sprite.rect.center)
+                    if nearest:
+                        h = nearest['hex']
+                        self.assign_unit_to_hex(sprite, h)
 
     def update_combat(self):
         """Aktualizuj logikę walki dla wszystkich jednostek"""
@@ -503,3 +576,74 @@ class HexGridManager:
         if hasattr(target, 'sync_pos_from_rect'):
             target.sync_pos_from_rect()
         target.hitbox = target.rect.copy().inflate(-target.rect.width * 0.7, -target.rect.height * 0.7)
+
+    # --- Swap mechanics ---
+    def _can_swap(self, a, b, hex_sprite) -> bool:
+        """Return True if dropping `a` onto `b` should swap their positions.
+        Rules:
+        - Different unit type/level (i.e., merge not possible)
+        - Drop target hex must be in player territory
+        - Both units belong to the same team ('blue' typically)
+        - Dragged unit must have a known previous hex to swap with
+        """
+        if a is None or b is None:
+            return False
+        if a is b:
+            return False
+        if not self.is_player_territory(hex_sprite):
+            return False
+        if getattr(a, 'team', None) != getattr(b, 'team', None):
+            return False
+        if self._can_merge(a, b):
+            return False
+        if self._drag_prev_hex_key is None:
+            return False
+        # default behavior targets player (blue) units; enemy drag is typically disabled
+        # but if enabled, still require same-team swap to avoid cross-team swaps
+        return True
+
+    def _perform_swap(self, dragged, other, target_hex):
+        """Swap positions between `dragged` (currently being moved) and `other` on `target_hex`.
+        Uses `_drag_prev_hex_key` as the origin hex for `dragged`.
+        """
+        prev_key = self._drag_prev_hex_key
+        if prev_key is None:
+            return
+        target_key = (target_hex.r, target_hex.c)
+
+        # Move `other` to dragged's previous hex
+        prev_hex_center = None
+        for hx in self.hexes:
+            if hx.r == prev_key[0] and hx.c == prev_key[1]:
+                prev_hex_center = hx.rect.center
+                break
+        if prev_hex_center is None:
+            prev_hex_center = self._drag_prev_center
+
+        # Update occupancy
+        # Ensure current mappings are cleared for both units
+        for k, v in list(self.occupancy.items()):
+            if v is dragged or v is other:
+                self.occupancy[k] = None
+
+        # Assign `dragged` to target hex
+        self.occupancy[target_key] = dragged
+        if hasattr(dragged, 'start_snap_move'):
+            dragged.start_snap_move(target_hex.rect.center, frames=10)
+        else:
+            dragged.rect.center = target_hex.rect.center
+            if hasattr(dragged, 'sync_pos_from_rect'):
+                dragged.sync_pos_from_rect()
+            dragged.hitbox = dragged.rect.copy().inflate(-dragged.rect.width * 0.7, -dragged.rect.height * 0.7)
+
+        # Assign `other` to previous hex
+        if prev_key is not None:
+            self.occupancy[prev_key] = other
+        if prev_hex_center is not None:
+            if hasattr(other, 'start_snap_move'):
+                other.start_snap_move(prev_hex_center, frames=10)
+            else:
+                other.rect.center = prev_hex_center
+                if hasattr(other, 'sync_pos_from_rect'):
+                    other.sync_pos_from_rect()
+                other.hitbox = other.rect.copy().inflate(-other.rect.width * 0.7, -other.rect.height * 0.7)

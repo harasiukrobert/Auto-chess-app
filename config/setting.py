@@ -5,6 +5,11 @@ SCREEN_HEIGHT = 1080
 # map settings
 title_size = 64
 
+# Board positioning (pixels): nudge the hex grid center without changing hex or unit sizes.
+# Negative Y moves the grid up; positive Y moves it down.
+BOARD_CENTER_OFFSET_X = 0
+BOARD_CENTER_OFFSET_Y = -10
+
 # draw order for sprites
 Layer = {
     'Background': 0,

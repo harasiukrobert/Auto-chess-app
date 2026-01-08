@@ -43,13 +43,20 @@ def compute_enemy_placement(unit_specs: list, hex_manager) -> list:
     tank_specs = [s for s in unit_specs if get_unit_role(s. get('name', '')) == 'tank']
     unknown_specs = [s for s in unit_specs if get_unit_role(s.get('name', '')) == 'unknown']
 
-    # Sort hexes by row priority
+    # Sort hexes by row priority, but prefer columns near the *center* of the board
+    # to avoid AI units stacking on the far left.
+    try:
+        cols = int(getattr(hex_manager, 'cols', 0) or 0)
+    except Exception:
+        cols = 0
+    center_c = (cols - 1) / 2.0 if cols > 0 else 0.0
+
     # Backline wants lowest row numbers (furthest from player - top of map)
-    backline_hexes = sorted(enemy_hexes, key=lambda h: (h.r, h.c))  # top first
-    # Midline wants middle rows
-    midline_hexes = sorted(enemy_hexes, key=lambda h: (h.r, h.c))  # will filter by row later
+    backline_hexes = sorted(enemy_hexes, key=lambda h: (h.r, abs(h.c - center_c), h.c))  # top first, center-out
+    # Midline wants middle rows (we'll filter by row later)
+    midline_hexes = sorted(enemy_hexes, key=lambda h: (h.r, abs(h.c - center_c), h.c))
     # Tanks want highest row numbers (closest to player - bottom of enemy zone)
-    tank_hexes = sorted(enemy_hexes, key=lambda h: (-h.r, h.c))  # bottom first
+    tank_hexes = sorted(enemy_hexes, key=lambda h: (-h.r, abs(h.c - center_c), h.c))  # bottom first, center-out
 
     result = []
     used_hexes = set()
@@ -72,7 +79,7 @@ def compute_enemy_placement(unit_specs: list, hex_manager) -> list:
         # Prefer hexes around the middle row
         midline_preferred = sorted(
             [h for h in enemy_hexes if (h.r, h.c) not in used_hexes],
-            key=lambda h: (abs(h.r - mid_row), h.r, h.c)
+            key=lambda h: (abs(h.r - mid_row), abs(h.c - center_c), h.r, h.c)
         )
 
         for spec in midline_specs:
@@ -91,7 +98,7 @@ def compute_enemy_placement(unit_specs: list, hex_manager) -> list:
                 break
 
     # Place unknown units anywhere available
-    all_available = sorted(enemy_hexes, key=lambda h: (h.r, h.c))
+    all_available = sorted(enemy_hexes, key=lambda h: (h.r, abs(h.c - center_c), h.c))
     for spec in unknown_specs:
         for h in all_available:
             if (h.r, h.c) not in used_hexes:
