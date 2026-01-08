@@ -2,8 +2,13 @@ import math
 
 import pygame
 
-HEX_RADIUS = 64
-HEX_MARGIN = 5
+# Hex grid geometry. Keep unit sprites unchanged; only shrink the grid footprint.
+# 0.9 => ~10% smaller hexes.
+HEX_SCALE = 0.9
+BASE_HEX_RADIUS = 64
+BASE_HEX_MARGIN = 5
+HEX_RADIUS = int(round(BASE_HEX_RADIUS * HEX_SCALE))
+HEX_MARGIN = max(0, int(round(BASE_HEX_MARGIN * HEX_SCALE)))
 ANIMATION_SPEED = 0.05
 WAVE_SPEED = 10
 HEX_COLOR = (128, 128, 128, 100)
@@ -182,8 +187,8 @@ class HexGridManager:
                 x_base = c * (h_width + HEX_MARGIN)
                 x_offset = (h_width / 2 + HEX_MARGIN / 2) if r % 2 == 1 else 0
 
-                pos_x = start_x + x_base + x_offset
-                pos_y = start_y + (r * (h_height * 0.75 + HEX_MARGIN)) + HEX_RADIUS
+                pos_x = int(round(start_x + x_base + x_offset))
+                pos_y = int(round(start_y + (r * (h_height * 0.75 + HEX_MARGIN)) + HEX_RADIUS))
 
                 hex_sprite = HexSprite(r, c, pos_x, pos_y, HEX_RADIUS, [self.group], self.layer)
 

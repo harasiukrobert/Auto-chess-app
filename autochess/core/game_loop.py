@@ -12,7 +12,8 @@ from autochess.ui.menu import Menu
 from autochess.ui.settings import SettingsScreen
 from autochess.ui.shop import Shop
 from autochess.ui.speed_control import SpeedControl
-from config.setting import (COLOR_BG, COLOR_HIGHLIGHT, COLOR_SUBTLE,
+from config.setting import (BOARD_CENTER_OFFSET_X, BOARD_CENTER_OFFSET_Y,
+                            COLOR_BG, COLOR_HIGHLIGHT, COLOR_SUBTLE,
                             COLOR_TEXT, DEFAULT_VOLUME, FPS, MUSIC_PATH,
                             SCREEN_HEIGHT, SCREEN_WIDTH, title_size)
 
@@ -44,7 +45,12 @@ class Game:
         self._ensure_play_music(MUSIC_PATH, self.volume)
 
         # Core
-        self.board = Board(hex_center=(SCREEN_WIDTH // 2 + title_size, SCREEN_HEIGHT // 2))
+        self.board = Board(
+            hex_center=(
+                (SCREEN_WIDTH // 2 + title_size) + int(BOARD_CENTER_OFFSET_X),
+                (SCREEN_HEIGHT // 2) + int(BOARD_CENTER_OFFSET_Y),
+            )
+        )
         self.clock = pygame.time.Clock()
         # Turn-based phases inside PLAY
         self.phase = 'PLANNING'  # 'PLANNING' | 'COMBAT'
