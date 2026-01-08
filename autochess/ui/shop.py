@@ -55,6 +55,10 @@ class Shop:
         self.color_text = colors.get('text', (230, 230, 230))
         self.font = pygame.font.SysFont(None, 28)
 
+        # Per-card cost label font
+        # Small enough to fit inside the bottom blue bar on card art
+        self.font_cost = pygame.font.SysFont(None, 24, bold=True)
+
         # GOLD FONT: 64
         self.font_gold = pygame.font.SysFont(None, 64, bold=True)
         self.font_debug = pygame.font.SysFont(None, 20)
@@ -287,6 +291,25 @@ class Shop:
                 initials = name[:2].upper()
                 txt = self.font.render(initials, True, (255, 255, 255))
                 self.screen.blit(txt, txt.get_rect(center=brect.center))
+
+            # Draw per-card unit cost (next to the coin area on the card art)
+            cost = self._get_unit_cost(name)
+            cost_text = str(cost)
+            cost_surf = self.font_cost.render(cost_text, True, (255, 215, 0))
+            cost_shadow = self.font_cost.render(cost_text, True, (0, 0, 0))
+
+            # Anchor the text within the bottom blue strip, left of the coin.
+            pad = max(3, int(min(brect.width, brect.height) * 0.03))
+            bottom_strip_h = max(14, int(brect.height * 0.18))
+            coin_d = max(10, int(bottom_strip_h * 0.55))
+            coin_x = int(brect.right - pad - coin_d)
+            coin_y = int(brect.bottom - pad - coin_d)
+
+            cx = int(coin_x - 2 - cost_surf.get_width())
+            cy = int(coin_y + (coin_d - cost_surf.get_height()) / 2)
+            cy = max(int(brect.bottom - bottom_strip_h + 2), min(cy, int(brect.bottom - cost_surf.get_height() - 2)))
+            self.screen.blit(cost_shadow, (cx + 1, cy + 1))
+            self.screen.blit(cost_surf, (cx, cy))
 
             # DEBUG: Draw Card Hitbox
             if self.show_hitboxes:
