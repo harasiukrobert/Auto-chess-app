@@ -58,7 +58,7 @@ UNITS_DATA = {
     },
     'assassin': {
         'name': 'Assassin',
-        'cost': 2,
+        'cost': 5,
         'icon': None,
         'evolve_multiplier': 1.08,
         # core stats
