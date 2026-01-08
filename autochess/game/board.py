@@ -73,6 +73,18 @@ class Board:
             for u in self.units if getattr(u, 'team', None) == 'red'
         ]
 
+    def has_free_player_hex(self) -> bool:
+        """Return True if at least one player-territory hex is unoccupied.
+        Counts only bottom-half (player) hexes as available.
+        """
+        try:
+            for hx in self.hex_manager.hexes:
+                if self.hex_manager.is_player_territory(hx) and self.hex_manager.is_hex_free(hx):
+                    return True
+        except Exception:
+            pass
+        return False
+
     def setup(self):
         self.hex_manager.generate()
 

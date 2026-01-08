@@ -62,6 +62,7 @@ class Game:
             on_spawn=self._shop_spawn_unit,
             on_get_gold=self._get_gold,
             on_deduct_gold=self._deduct_gold,
+            on_can_spawn=self._can_spawn_blue,
         )
 
         # Static archer background (scaled+cropped)
@@ -153,6 +154,13 @@ class Game:
             import traceback
             traceback.print_exc()
             return None
+
+    def _can_spawn_blue(self, name: str):
+        """Return True if there's at least one free player hex for a new blue unit."""
+        try:
+            return bool(self.board.has_free_player_hex())
+        except Exception:
+            return False
 
     def _get_gold(self):
         """Get current player gold from board."""

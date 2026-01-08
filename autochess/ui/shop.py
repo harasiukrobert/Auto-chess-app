@@ -2,6 +2,7 @@ import os
 import random
 
 import pygame
+
 from autochess.game.units import UNITS_DATA
 
 
@@ -10,7 +11,7 @@ class Shop:
     Shop overlay for the planning phase.
     """
 
-    def __init__(self, screen, items, colors=None, on_spawn=None, on_get_gold=None, on_deduct_gold=None):
+    def __init__(self, screen, items, colors=None, on_spawn=None, on_get_gold=None, on_deduct_gold=None, on_can_spawn=None):
         self.screen = screen
         self.pool_items = list(items)
         self.offer_count = 4
@@ -43,6 +44,8 @@ class Shop:
         self.on_spawn = on_spawn
         self.on_get_gold = on_get_gold
         self.on_deduct_gold = on_deduct_gold
+        # Optional: check if there is space to place a unit before purchasing
+        self.on_can_spawn = on_can_spawn
 
         # Debug toggle state
         self.show_hitboxes = False
@@ -63,6 +66,11 @@ class Shop:
         self.reroll_cost = 2
         self.reroll_rect = None
         self.bar_rect = None
+
+        # Shake feedback state (used when purchase blocked due to no space)
+        self._shake_until = 0
+        self._shake_mag = 0
+        self._shake_speed_ms = 40
 
         self.units_data = self._load_units_data()
 
@@ -124,6 +132,11 @@ class Shop:
         x = self.rect.centerx - bw // 2
         y = self.rect.bottom - bh - 5
 
+        # Apply shake offset if active
+        sx, sy = self._get_shake_offset()
+        x += sx
+        y += sy
+
         self.bar_rect = pygame.Rect(x, y, bw, bh)
 
         shadow = pygame.Surface((bw, bh), pygame.SRCALPHA)
@@ -172,6 +185,17 @@ class Shop:
                         current_gold = self.on_get_gold() if callable(self.on_get_gold) else 0
                         # Determine per-unit cost from units_data, fallback to self.unit_cost
                         cost = self._get_unit_cost(name)
+                        # Pre-check: ensure there is space on player's board for this unit
+                        if callable(getattr(self, 'on_can_spawn', None)):
+                            try:
+                                if not self.on_can_spawn(name):
+                                    # No available player hexes; abort purchase with feedback
+                                    self._trigger_shake()
+                                    return None
+                            except Exception:
+                                # If the callback errors, fail closed (do not buy)
+                                self._trigger_shake()
+                                return None
                         if current_gold >= cost:
                             if callable(self.on_deduct_gold) and self.on_deduct_gold(cost):
                                 if callable(self.on_spawn):
@@ -316,3 +340,26 @@ class Shop:
             return cost if cost > 0 else 1
         except Exception:
             return 1
+
+    # ----------------------------------------------------------------------------------
+    # Feedback: Shake animation when purchase is blocked
+    # ----------------------------------------------------------------------------------
+    def _trigger_shake(self, duration_ms: int = 280, magnitude: int = 10):
+        try:
+            now = pygame.time.get_ticks()
+        except Exception:
+            now = 0
+        self._shake_until = now + int(max(0, duration_ms))
+        self._shake_mag = int(max(0, magnitude))
+
+    def _get_shake_offset(self):
+        try:
+            now = pygame.time.get_ticks()
+        except Exception:
+            return (0, 0)
+        if now >= self._shake_until or self._shake_mag <= 0:
+            return (0, 0)
+        # Alternate direction every _shake_speed_ms; simple horizontal shake
+        step = (now // max(1, self._shake_speed_ms)) % 2
+        sign = 1 if step == 0 else -1
+        return (sign * self._shake_mag, 0)
