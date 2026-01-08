@@ -1,3 +1,4 @@
+import math
 from random import choice, randrange
 
 from pytmx.util_pygame import load_pygame
@@ -291,6 +292,51 @@ class Board:
         cfg = self.rounds.get_round(round_num) or {}
         size = self.rounds.get_board_size(round_num)
 
+        # When moving to a new round, the grid size can change. If we keep using
+        # old pixel positions, a centered grid expansion will shift units toward
+        # the middle. Capture each blue unit's old hex (r,c) so we can remap it
+        # onto the new grid in a bottom-anchored + horizontally centered way.
+        blue_units = []
+        old_hex_by_unit = {}
+        old_cols = old_rows = None
+        if not initial and hasattr(self, 'hex_manager') and self.hex_manager is not None:
+            try:
+                old_cols = int(getattr(self.hex_manager, 'cols', 0) or 0)
+                old_rows = int(getattr(self.hex_manager, 'rows', 0) or 0)
+            except Exception:
+                old_cols = old_rows = None
+            blue_units = [u for u in list(self.units) if getattr(u, 'team', None) == 'blue']
+            # Prefer occupancy mapping (exact); fall back to nearest hex.
+            for u in blue_units:
+                key = None
+                try:
+                    occ = getattr(self.hex_manager, 'occupancy', {}) or {}
+                    for k, v in occ.items():
+                        if v is u:
+                            key = k
+                            break
+                except Exception:
+                    key = None
+                if key is None:
+                    try:
+                        # Prefer searching within player territory so we don't accidentally
+                        # snap to an enemy-side hex when determining the formation.
+                        bx, by = u.rect.center
+                        best_hx = None
+                        best_d = None
+                        for hx in getattr(self.hex_manager, 'hexes', []) or []:
+                            if not self.hex_manager.is_player_territory(hx):
+                                continue
+                            d = (hx.rect.centerx - bx) ** 2 + (hx.rect.centery - by) ** 2
+                            if best_d is None or d < best_d:
+                                best_d = d
+                                best_hx = hx
+                        if best_hx is not None:
+                            key = (int(best_hx.r), int(best_hx.c))
+                    except Exception:
+                        key = None
+                old_hex_by_unit[u] = key
+
         # Apply board size
         self._apply_board_size(size.get('cols', 9), size.get('rows', 6))
 
@@ -302,8 +348,104 @@ class Board:
             pstart = self.rounds.get_player_start()
             self._spawn_batch(pstart, team='blue')
         else:
-            # ensure all blue units snap to nearest hexes in the new grid
-            self.hex_manager.initialize_occupancy()
+            # Remap blue units from old grid coordinates to new grid coordinates.
+            # - Vertical: keep distance from the bottom so formations stay near bottom when rows grow.
+            # - Horizontal: keep offsets from center so formations stay centered when cols grow.
+            new_cols = int(getattr(self.hex_manager, 'cols', 0) or 0)
+            new_rows = int(getattr(self.hex_manager, 'rows', 0) or 0)
+
+            def _round_half_away_from_zero(v: float) -> int:
+                # Python's round() is bankers rounding; we want predictable centering.
+                if v >= 0:
+                    return int(math.floor(v + 0.5))
+                return int(math.ceil(v - 0.5))
+
+            def _find_hex(r_val: int, c_val: int):
+                for hx in self.hex_manager.hexes:
+                    if hx.r == r_val and hx.c == c_val:
+                        return hx
+                return None
+
+            # Clear occupancy map in the new grid before re-assigning.
+            try:
+                for k in list(self.hex_manager.occupancy.keys()):
+                    self.hex_manager.occupancy[k] = None
+            except Exception:
+                pass
+
+            # Place in a stable order (bottom-first) to reduce collision chaos.
+            placement_order = []
+            for u in blue_units:
+                key = old_hex_by_unit.get(u)
+                if key is None:
+                    placement_order.append((9999, 9999, u))
+                else:
+                    placement_order.append((-int(key[0]), int(key[1]), u))
+            placement_order.sort()
+
+            for _nr, _nc, u in placement_order:
+                placed = False
+                key = old_hex_by_unit.get(u)
+                target_hex = None
+                desired_center = None
+                if key is not None and old_cols and old_rows and new_cols and new_rows:
+                    try:
+                        r0, c0 = int(key[0]), int(key[1])
+                        # Bottom anchoring: preserve distance from bottom row.
+                        dist_from_bottom = (old_rows - 1) - r0
+                        r1 = (new_rows - 1) - dist_from_bottom
+
+                        # Horizontal centering: preserve offsets from board center.
+                        # Use a doubled integer center to keep half-steps when widths are even.
+                        offset2 = (2 * c0) - (old_cols - 1)
+                        c1 = _round_half_away_from_zero(((new_cols - 1) + offset2) / 2.0)
+
+                        # Clamp to grid.
+                        r1 = max(0, min(new_rows - 1, int(r1)))
+                        c1 = max(0, min(new_cols - 1, int(c1)))
+
+                        target_hex = _find_hex(r1, c1)
+                        if target_hex is not None:
+                            desired_center = target_hex.rect.center
+                    except Exception:
+                        target_hex = None
+
+                # If mapped cell is invalid/occupied/not in player territory, find nearest free player hex.
+                if target_hex is not None:
+                    try:
+                        if (not self.hex_manager.is_player_territory(target_hex)) or (not self.hex_manager.is_hex_free(target_hex)):
+                            target_hex = None
+                    except Exception:
+                        target_hex = None
+
+                if target_hex is None:
+                    # Choose the closest free player-territory hex to the *intended* mapped center.
+                    # This avoids drifting toward the middle when the board grows.
+                    try:
+                        if desired_center is None:
+                            desired_center = u.rect.center
+                        px, py = desired_center
+                        candidates = [
+                            hx for hx in self.hex_manager.hexes
+                            if self.hex_manager.is_player_territory(hx) and self.hex_manager.is_hex_free(hx)
+                        ]
+                        if candidates:
+                            target_hex = min(candidates, key=lambda hh: (hh.rect.centerx - px) ** 2 + (hh.rect.centery - py) ** 2)
+                    except Exception:
+                        target_hex = None
+
+                if target_hex is not None:
+                    try:
+                        placed = self.hex_manager.assign_unit_to_hex(u, target_hex)
+                    except Exception:
+                        placed = False
+
+                if not placed:
+                    # Last resort: any free hex in player territory.
+                    try:
+                        self.hex_manager.place_unit_on_free_hex_in_territory(u, team='blue')
+                    except Exception:
+                        pass
 
         # Always kill existing red units (they'll be respawned from AI roster)
         for u in list(self.units):
