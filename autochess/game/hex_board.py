@@ -326,8 +326,8 @@ class HexGridManager:
                                 if self._can_merge(self.selected_unit, occ):
                                     h.dynamic_color = MERGE_TARGET_COLOR
                                 else:
-                                    if DRAG_OCCUPIED_COLOR is not None:
-                                        h.dynamic_color = DRAG_OCCUPIED_COLOR
+                                    # Do not grey-out occupied player hexes; leave default color
+                                    h.dynamic_color = None
                         h.redraw()
                     break
 
@@ -352,6 +352,11 @@ class HexGridManager:
                         if self._can_merge(self.selected_unit, occ):
                             self._perform_merge(self.selected_unit, occ, h)
                             placed = True
+                        else:
+                            # attempt swap when different type/level
+                            if self._can_swap(self.selected_unit, occ, h):
+                                self._perform_swap(self.selected_unit, occ, h)
+                                placed = True
             if not placed and self._drag_prev_center:
                 # revert to original hex center if known
                 revert_center = self._drag_prev_center
@@ -503,3 +508,68 @@ class HexGridManager:
         if hasattr(target, 'sync_pos_from_rect'):
             target.sync_pos_from_rect()
         target.hitbox = target.rect.copy().inflate(-target.rect.width * 0.7, -target.rect.height * 0.7)
+
+    # --- Swap mechanics ---
+    def _can_swap(self, a, b, hex_sprite) -> bool:
+        """Return True if dropping `a` onto `b` should swap their positions.
+        Rules:
+        - Different unit type/level (i.e., merge not possible)
+        - Drop target hex must be in player territory
+        - Both units belong to the same team ('blue' typically)
+        - Dragged unit must have a known previous hex to swap with
+        """
+        if a is None or b is None:
+            return False
+        if a is b:
+            return False
+        if not self.is_player_territory(hex_sprite):
+            return False
+        if getattr(a, 'team', None) != getattr(b, 'team', None):
+            return False
+        if self._can_merge(a, b):
+            return False
+        if self._drag_prev_hex_key is None:
+            return False
+        # default behavior targets player (blue) units; enemy drag is typically disabled
+        # but if enabled, still require same-team swap to avoid cross-team swaps
+        return True
+
+    def _perform_swap(self, dragged, other, target_hex):
+        """Swap positions between `dragged` (currently being moved) and `other` on `target_hex`.
+        Uses `_drag_prev_hex_key` as the origin hex for `dragged`.
+        """
+        prev_key = self._drag_prev_hex_key
+        if prev_key is None:
+            return
+        target_key = (target_hex.r, target_hex.c)
+
+        # Move `other` to dragged's previous hex
+        prev_hex_center = None
+        for hx in self.hexes:
+            if hx.r == prev_key[0] and hx.c == prev_key[1]:
+                prev_hex_center = hx.rect.center
+                break
+        if prev_hex_center is None:
+            prev_hex_center = self._drag_prev_center
+
+        # Update occupancy
+        # Ensure current mappings are cleared for both units
+        for k, v in list(self.occupancy.items()):
+            if v is dragged or v is other:
+                self.occupancy[k] = None
+
+        # Assign `dragged` to target hex
+        self.occupancy[target_key] = dragged
+        dragged.rect.center = target_hex.rect.center
+        if hasattr(dragged, 'sync_pos_from_rect'):
+            dragged.sync_pos_from_rect()
+        dragged.hitbox = dragged.rect.copy().inflate(-dragged.rect.width * 0.7, -dragged.rect.height * 0.7)
+
+        # Assign `other` to previous hex
+        if prev_key is not None:
+            self.occupancy[prev_key] = other
+        if prev_hex_center is not None:
+            other.rect.center = prev_hex_center
+            if hasattr(other, 'sync_pos_from_rect'):
+                other.sync_pos_from_rect()
+            other.hitbox = other.rect.copy().inflate(-other.rect.width * 0.7, -other.rect.height * 0.7)
