@@ -263,6 +263,28 @@ class HexGridManager:
             return True
         return False
 
+    def assign_unit_to_hex_animated(self, unit, hex_sprite, frames: int = 10):
+        """Assign unit to hex in occupancy and animate movement to hex center."""
+        key = (hex_sprite.r, hex_sprite.c)
+        # clear any previous assignment of this unit
+        for k, v in self.occupancy.items():
+            if v is unit:
+                self.occupancy[k] = None
+        # set new if free
+        if self.occupancy.get(key) is None:
+            self.occupancy[key] = unit
+            # Only animate if the unit supports it; otherwise fall back to instant.
+            if hasattr(unit, 'start_snap_move'):
+                unit.start_snap_move(hex_sprite.rect.center, frames=frames)
+            else:
+                unit.rect.center = hex_sprite.rect.center
+                if hasattr(unit, 'sync_pos_from_rect'):
+                    unit.sync_pos_from_rect()
+                unit.hitbox = unit.rect.copy().inflate(
+                    -unit.rect.width * 0.7, -unit.rect.height * 0.7)
+            return True
+        return False
+
     def update_shrink_animation(self):
         """Aktualizuj animację zanikania siatki"""
         if not self.shrinking_started:
@@ -300,6 +322,12 @@ class HexGridManager:
                     continue
                 if sprite.hitbox. collidepoint(mouse_pos):
                     self.selected_unit = sprite
+                    # Cancel any ongoing snap animation so drag takes full control
+                    try:
+                        if hasattr(self.selected_unit, '_snap_move_active'):
+                            self.selected_unit._snap_move_active = False
+                    except Exception:
+                        pass
                     self._drag_prev_center = sprite.rect.center
                     # Remember which hex the unit currently occupies
                     self._drag_prev_hex_key = None
@@ -346,7 +374,7 @@ class HexGridManager:
                 if self.is_player_territory(h) and self.selected_unit.hitbox.colliderect(h.hitbox):
                     occ = self.occupancy.get((h.r, h.c))
                     if (self.is_hex_free(h) or occ is self.selected_unit):
-                        placed = self.assign_unit_to_hex(self.selected_unit, h)
+                        placed = self.assign_unit_to_hex_animated(self.selected_unit, h, frames=10)
                     else:
                         # attempt merge when dropping onto occupied hex
                         if self._can_merge(self.selected_unit, occ):
@@ -366,11 +394,14 @@ class HexGridManager:
                         if hx.r == r and hx.c == c:
                             revert_center = hx.rect.center
                             break
-                self.selected_unit.rect.center = revert_center
-                if hasattr(self.selected_unit, 'sync_pos_from_rect'):
-                    self.selected_unit.sync_pos_from_rect()
-                self.selected_unit.hitbox = self.selected_unit.rect.copy().inflate(
-                    -self.selected_unit.rect.width * 0.7, -self.selected_unit.rect.height * 0.7)
+                if hasattr(self.selected_unit, 'start_snap_move'):
+                    self.selected_unit.start_snap_move(revert_center, frames=10)
+                else:
+                    self.selected_unit.rect.center = revert_center
+                    if hasattr(self.selected_unit, 'sync_pos_from_rect'):
+                        self.selected_unit.sync_pos_from_rect()
+                    self.selected_unit.hitbox = self.selected_unit.rect.copy().inflate(
+                        -self.selected_unit.rect.width * 0.7, -self.selected_unit.rect.height * 0.7)
             # clear drag state and color overrides
             for h in self.hexes:
                 if h.dynamic_color is not None:
@@ -390,10 +421,37 @@ class HexGridManager:
                 continue
             # Only snap when not dragging
             if self.selected_unit is None:
-                nearest = self.find_nearest_hex_center(sprite.rect.center)
-                if nearest:
-                    h = nearest['hex']
-                    self.assign_unit_to_hex(sprite, h)
+                # Do not fight active placement animations
+                if hasattr(sprite, 'is_snap_moving') and sprite.is_snap_moving():
+                    continue
+                # If this unit is already assigned to a hex, gently keep it on that hex center
+                assigned_key = None
+                for k, v in self.occupancy.items():
+                    if v is sprite:
+                        assigned_key = k
+                        break
+                if assigned_key is not None:
+                    ar, ac = assigned_key
+                    assigned_hex = None
+                    for hx in self.hexes:
+                        if hx.r == ar and hx.c == ac:
+                            assigned_hex = hx
+                            break
+                    if assigned_hex is not None and sprite.rect.center != assigned_hex.rect.center:
+                        if hasattr(sprite, 'start_snap_move'):
+                            sprite.start_snap_move(assigned_hex.rect.center, frames=6)
+                        else:
+                            sprite.rect.center = assigned_hex.rect.center
+                            if hasattr(sprite, 'sync_pos_from_rect'):
+                                sprite.sync_pos_from_rect()
+                            sprite.hitbox = sprite.rect.copy().inflate(
+                                -sprite.rect.width * 0.7, -sprite.rect.height * 0.7)
+                else:
+                    # Fallback: seed occupancy if missing
+                    nearest = self.find_nearest_hex_center(sprite.rect.center)
+                    if nearest:
+                        h = nearest['hex']
+                        self.assign_unit_to_hex(sprite, h)
 
     def update_combat(self):
         """Aktualizuj logikę walki dla wszystkich jednostek"""
@@ -560,16 +618,22 @@ class HexGridManager:
 
         # Assign `dragged` to target hex
         self.occupancy[target_key] = dragged
-        dragged.rect.center = target_hex.rect.center
-        if hasattr(dragged, 'sync_pos_from_rect'):
-            dragged.sync_pos_from_rect()
-        dragged.hitbox = dragged.rect.copy().inflate(-dragged.rect.width * 0.7, -dragged.rect.height * 0.7)
+        if hasattr(dragged, 'start_snap_move'):
+            dragged.start_snap_move(target_hex.rect.center, frames=10)
+        else:
+            dragged.rect.center = target_hex.rect.center
+            if hasattr(dragged, 'sync_pos_from_rect'):
+                dragged.sync_pos_from_rect()
+            dragged.hitbox = dragged.rect.copy().inflate(-dragged.rect.width * 0.7, -dragged.rect.height * 0.7)
 
         # Assign `other` to previous hex
         if prev_key is not None:
             self.occupancy[prev_key] = other
         if prev_hex_center is not None:
-            other.rect.center = prev_hex_center
-            if hasattr(other, 'sync_pos_from_rect'):
-                other.sync_pos_from_rect()
-            other.hitbox = other.rect.copy().inflate(-other.rect.width * 0.7, -other.rect.height * 0.7)
+            if hasattr(other, 'start_snap_move'):
+                other.start_snap_move(prev_hex_center, frames=10)
+            else:
+                other.rect.center = prev_hex_center
+                if hasattr(other, 'sync_pos_from_rect'):
+                    other.sync_pos_from_rect()
+                other.hitbox = other.rect.copy().inflate(-other.rect.width * 0.7, -other.rect.height * 0.7)

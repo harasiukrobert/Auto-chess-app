@@ -329,6 +329,14 @@ class Unit(pygame.sprite.Sprite):
         self.rect = self.image.get_rect(topleft=pos)
         self.z = z
         self.hitbox = self.rect.copy().inflate(-self.rect.width * 0.7, -self.rect.height * 0.7)
+
+        # Planning-phase smooth placement (snap-to-hex) animation.
+        # Uses frame-based interpolation (no dt in current loop).
+        self._snap_move_active = False
+        self._snap_move_start = pygame.math.Vector2(self.rect.center)
+        self._snap_move_target = pygame.math.Vector2(self.rect.center)
+        self._snap_move_elapsed = 0
+        self._snap_move_total = 0
         # Simulation speed (set by board depending on combat state)
         self.sim_speed = 1.0
         # fractional accumulators for timing tied to frames
@@ -340,6 +348,56 @@ class Unit(pygame.sprite.Sprite):
         # Apply initial level scaling
         if self.level > 1:
             self._apply_level_scaling(set_full_hp=True)
+
+    def start_snap_move(self, target_center, frames: int = 10):
+        """Animate unit center to target_center over a small number of frames.
+
+        Intended for planning/drag placement. Does not change combat behavior.
+        """
+        try:
+            tx, ty = int(target_center[0]), int(target_center[1])
+        except Exception:
+            return
+
+        total = 10
+        try:
+            total = int(frames)
+        except Exception:
+            total = 10
+        if total < 1:
+            total = 1
+
+        self._snap_move_active = True
+        self._snap_move_start = pygame.math.Vector2(self.rect.center)
+        self._snap_move_target = pygame.math.Vector2((tx, ty))
+        self._snap_move_elapsed = 0
+        self._snap_move_total = total
+
+    def is_snap_moving(self) -> bool:
+        return bool(getattr(self, '_snap_move_active', False))
+
+    def _update_snap_move(self):
+        if not getattr(self, '_snap_move_active', False):
+            return
+
+        total = max(1, int(getattr(self, '_snap_move_total', 1) or 1))
+        elapsed = int(getattr(self, '_snap_move_elapsed', 0) or 0) + 1
+        self._snap_move_elapsed = elapsed
+
+        t = min(1.0, elapsed / float(total))
+        # Smoothstep easing for a small but pleasant glide
+        t_ease = t * t * (3.0 - 2.0 * t)
+
+        start = getattr(self, '_snap_move_start', pygame.math.Vector2(self.rect.center))
+        target = getattr(self, '_snap_move_target', pygame.math.Vector2(self.rect.center))
+        pos = start.lerp(target, t_ease)
+
+        self.rect.center = (int(round(pos.x)), int(round(pos.y)))
+        self.hitbox.center = self.rect.center
+        self.sync_pos_from_rect()
+
+        if t >= 1.0:
+            self._snap_move_active = False
 
     def _apply_level_scaling(self, set_full_hp: bool = False):
         """Recalculate stats based on current level and evolve multiplier.
@@ -752,4 +810,5 @@ class Unit(pygame.sprite.Sprite):
 
     def update(self):
         """Główna aktualizacja jednostki"""
+        self._update_snap_move()
         self.animate()
