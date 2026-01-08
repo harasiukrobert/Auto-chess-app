@@ -73,6 +73,10 @@ class Game:
             on_can_spawn=self._can_spawn_blue,
         )
 
+        # Snapshot of shop state at the START of planning (offers + lock).
+        # Used to rollback paid rerolls on loss along with refunded gold.
+        self._pre_planning_shop_snapshot = None
+
         # Static archer background (scaled+cropped)
         self.menu_bg = BackgroundStatic(
             screen=self.screen, image_path="files/ui/bg_archer.png", overlay_alpha=28
@@ -141,6 +145,32 @@ class Game:
         )
 
         self.startgame()
+
+    # ---------------------------------------------------------------------
+    # Snapshot helpers
+    # ---------------------------------------------------------------------
+    def _save_pre_planning_snapshot(self):
+        """Capture board + shop state at the start of planning."""
+        try:
+            self.board.save_pre_planning_snapshot()
+        except Exception:
+            pass
+        try:
+            self._pre_planning_shop_snapshot = self.shop.get_state()
+        except Exception:
+            self._pre_planning_shop_snapshot = None
+
+    def _restore_from_pre_planning_snapshot(self):
+        """Restore board + shop state to the planning-start snapshot (used on loss)."""
+        try:
+            self.board.restore_from_pre_planning_snapshot()
+        except Exception:
+            pass
+        try:
+            if self._pre_planning_shop_snapshot is not None:
+                self.shop.set_state(self._pre_planning_shop_snapshot)
+        except Exception:
+            pass
 
     def _on_speed_change(self, value: float):
         """Apply speed change to current board's hex manager (combat sim speed)."""
@@ -272,11 +302,8 @@ class Game:
                         self.state = "PLAY"
                         # switch to play music
                         self._ensure_play_music(play_music_path, self.volume)
-                        # Round 1 is already applied in Board.__init__(), just save snapshot
-                        try:
-                            self.board.save_pre_planning_snapshot()
-                        except Exception:
-                            pass
+                        # Round 1 is already applied in Board.__init__(); snapshot planning start
+                        self._save_pre_planning_snapshot()
                     elif action == "settings":
                         self.state = "SETTINGS"
                         # ensure menu music is playing while in settings
@@ -396,7 +423,7 @@ class Game:
                     except Exception:
                         pass
                     # Loss: restore last planning layout to retry
-                    self.board.restore_from_pre_planning_snapshot()
+                    self._restore_from_pre_planning_snapshot()
                     # Rebuild enemies from pre-combat snapshot to original positions
                     try:
                         self.board.rebuild_enemies_from_snapshot(include_extras=False, round_num=self.board.current_round)
@@ -404,10 +431,7 @@ class Game:
                         # Fallback to round config if snapshot missing
                         self.board.respawn_current_round_enemies()
                     # New planning cycle begins after loss: capture snapshot so future losses
-                    try:
-                        self.board.save_pre_planning_snapshot()
-                    except Exception:
-                        pass
+                    self._save_pre_planning_snapshot()
                     self.phase = 'PLANNING'
                     try:
                         self.advance_btn.label = "FIGHT!"
@@ -473,17 +497,20 @@ class Game:
                                 self.board.reset_units_to_initial()
                                 # Apply next round config (grid + enemies)
                                 self.board.apply_round(self.board.current_round, initial=False)
-                                # New planning phase begins: capture snapshot for potential rollback on loss
+                                # New planning phase begins:
+                                # - auto reroll shop for the new round unless locked
+                                # - snapshot shop offers + gold/roster so losses can rollback paid rerolls
                                 try:
-                                    self.board.save_pre_planning_snapshot()
+                                    self.shop.reroll_for_new_round()
                                 except Exception:
                                     pass
+                                self._save_pre_planning_snapshot()
                             else:
                                 # No more rounds: show end screen
                                 self.state = "END"
                         else:
                             # Loss: restore last planning layout to retry
-                            self.board.restore_from_pre_planning_snapshot()
+                            self._restore_from_pre_planning_snapshot()
                             # Rebuild enemies from pre-combat snapshot to original positions
                             try:
                                 self.board.rebuild_enemies_from_snapshot(include_extras=False, round_num=self.board.current_round)
@@ -494,10 +521,7 @@ class Game:
                             # TODO: rollback buys stored in snapshot
                             # New planning cycle begins after loss: capture snapshot so future losses
                             # roll back to this restored state (including levels/positions)
-                            try:
-                                self.board.save_pre_planning_snapshot()
-                            except Exception:
-                                pass
+                            self._save_pre_planning_snapshot()
                         self.phase = 'PLANNING'
                         try:
                             self.advance_btn.label = "FIGHT!"
