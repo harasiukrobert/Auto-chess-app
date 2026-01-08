@@ -60,13 +60,13 @@ UNITS_DATA = {
         'name': 'Assassin',
         'cost': 2,
         'icon': None,
-        'evolve_multiplier': 1.15,
+        'evolve_multiplier': 1.08,
         # core stats
-        'hp': 18,
-        'damage': 3,
+        'hp': 14,
+        'damage': 2,
         'attack_range': 40,
-        'attack_delay': 45,
-        'speed': 2.4,
+        'attack_delay': 65,
+        'speed': 2.0,
         'is_ranged': False,
         'anim_speed': 0.10,
         'attack_anim_speed': 0.10,
@@ -482,22 +482,38 @@ class Unit(pygame.sprite.Sprite):
             self.rect.centery - other.rect.centery
         )
 
-    def find_nearest_enemy(self, all_units):
+    def find_enemy(self, all_units):
         """Znajdź najbliższego wroga"""
-        nearest = None
-        min_dist = float('inf')
-
+        enemies = []
         for unit in all_units:
             if not isinstance(unit, Unit):
                 continue
-
             if unit.team != self.team and unit.alive:
-                dist = self.get_distance_to(unit)
-                if dist < min_dist:
-                    min_dist = dist
-                    nearest = unit
+                enemies.append(unit)
 
-        return nearest
+        if not enemies:
+            return None
+
+        # Default: pick nearest enemy.
+        # Special-case assassin: prefer ranged/healer and deeper backline targets.
+        if getattr(self, 'name', None) != 'assassin':
+            return min(enemies, key=self.get_distance_to)
+
+        def _is_backline_priority(u: 'Unit') -> bool:
+            # Treat healers as backline priority too.
+            return bool(getattr(u, 'is_ranged', False) or getattr(u, 'is_healer', False))
+
+        # Backline heuristic based on team orientation:
+        # - Red team generally spawns at the top (smaller y). Backline => smaller y.
+        # - Blue team generally spawns at the bottom (larger y). Backline => larger y.
+        def _assassin_key(u: 'Unit'):
+            ranged_or_healer_first = 0 if _is_backline_priority(u) else 1
+            y = u.rect.centery
+            backline_sort = y if u.team == 'red' else -y
+            dist = self.get_distance_to(u)
+            return (ranged_or_healer_first, backline_sort, dist)
+
+        return min(enemies, key=_assassin_key)
 
     def find_wounded_ally(self, all_units):
         """Znajdź najbliższego rannego sojusznika"""
@@ -805,7 +821,7 @@ class Unit(pygame.sprite.Sprite):
                     self.status = 'Idle'
             return
 
-        self.target = self.find_nearest_enemy(all_units)
+        self.target = self.find_enemy(all_units)
 
         if self.target:
             dist = self.get_distance_to(self.target)
