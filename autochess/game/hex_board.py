@@ -13,6 +13,7 @@ ANIMATION_SPEED = 0.05
 WAVE_SPEED = 10
 HEX_COLOR = (128, 128, 128, 100)
 HEX_BORDER_COLOR = (64, 64, 64)
+HEX_BORDER_WIDTH = 3
 # Drag colors used during unit dragging (no alpha overlay)
 DRAG_FREE_COLOR = (128, 128, 128, 100)
 DRAG_OCCUPIED_COLOR = (64, 64, 64, 150)
@@ -104,7 +105,11 @@ class HexSprite(pygame.sprite.Sprite):
 
         base_color = self.dynamic_color if self.dynamic_color else HEX_COLOR
         pygame.draw.polygon(self.image, base_color, current_points)
-        pygame.draw.polygon(self.image, HEX_BORDER_COLOR, current_points, 3)
+        pygame.draw.polygon(self.image, HEX_BORDER_COLOR, current_points, HEX_BORDER_WIDTH)
+
+        # Simple anti-aliasing pass for the outline. This doesn't change the
+        # thickness (still controlled by HEX_BORDER_WIDTH) but smooths jagged edges.
+        pygame.draw.aalines(self.image, HEX_BORDER_COLOR, True, current_points)
 
 
 class HexGridManager:
