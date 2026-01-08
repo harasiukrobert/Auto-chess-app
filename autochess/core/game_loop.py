@@ -42,7 +42,10 @@ class Game:
         self._current_music_path = None
 
         # Try load menu music early (volume will be applied again after settings are loaded)
-        self._ensure_play_music(MUSIC_PATH, self.volume)
+        self.menu_music_path = MUSIC_PATH
+        self.play_music_path = "files/audio/buying_phase.wav"
+
+        self._ensure_play_music(self.menu_music_path, self.volume)
 
         # Core
         self.board = Board(
@@ -145,6 +148,59 @@ class Game:
         )
 
         self.startgame()
+
+    def _start_new_run(self):
+        """Start a brand-new run when entering PLAY from the main menu."""
+        try:
+            self.board.reset_run()
+        except Exception:
+            pass
+
+        self._surrender_requested = False
+        self.phase = 'PLANNING'
+
+        # Reset shop to a clean state for a new run.
+        try:
+            self.shop.locked = False
+            self.shop.reroll_free()
+        except Exception:
+            pass
+
+        # Clear any previous planning snapshot and take a fresh one.
+        self._pre_planning_shop_snapshot = None
+        self._save_pre_planning_snapshot()
+
+    def _go_to_menu(self, *, reset_run: bool = False):
+        """Return to main menu in a consistent, safe state."""
+        if reset_run:
+            try:
+                self.board.reset_run()
+            except Exception:
+                pass
+
+        # Cancel in-game transient state so the menu isn't just a visual overlay.
+        self._surrender_requested = False
+        self.phase = 'PLANNING'
+        try:
+            if hasattr(self.board, 'hex_manager') and self.board.hex_manager and self.board.hex_manager.is_combat_active():
+                self.board.hex_manager.toggle_combat()
+        except Exception:
+            pass
+        try:
+            self.advance_btn.label = "FIGHT!"
+        except Exception:
+            pass
+
+        # Reset menu hover/click targets so the menu is immediately interactive.
+        try:
+            self.menu.hovered = None
+            self.menu.selected = 0
+            self.menu.button_rects = []
+        except Exception:
+            pass
+
+        self.state = "MENU"
+        self._ensure_play_music(self.menu_music_path, self.volume)
 
     # ---------------------------------------------------------------------
     # Snapshot helpers
@@ -285,10 +341,6 @@ class Game:
             self.speed_ui.screen = self.screen
 
     def startgame(self):
-        # path for PLAY music
-        play_music_path = "files/audio/buying_phase.wav"
-        menu_music_path = MUSIC_PATH  # from config (menu.wav)
-
         while True:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -299,24 +351,21 @@ class Game:
                         sys.exit(0)
                     action = self.menu.handle_event(event)
                     if action == "play":
+                        self._start_new_run()
                         self.state = "PLAY"
                         # switch to play music
-                        self._ensure_play_music(play_music_path, self.volume)
-                        # Round 1 is already applied in Board.__init__(); snapshot planning start
-                        self._save_pre_planning_snapshot()
+                        self._ensure_play_music(self.play_music_path, self.volume)
                     elif action == "settings":
                         self.state = "SETTINGS"
                         # ensure menu music is playing while in settings
-                        self._ensure_play_music(menu_music_path, self.volume)
+                        self._ensure_play_music(self.menu_music_path, self.volume)
                     elif action == "exit":
                         sys.exit(0)
 
                 elif self.state == "SETTINGS":
                     # Esc returns to menu (do NOT quit)
                     if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                        self.state = "MENU"
-                        # ensure menu music is playing when returning to menu
-                        self._ensure_play_music(menu_music_path, self.volume)
+                        self._go_to_menu(reset_run=False)
                         continue
 
                     # pass events to settings screen
@@ -329,16 +378,13 @@ class Game:
                         self.set_volume(self.volume)
                         self.set_sfx_volume(self.sfx_volume)
                     elif result == "back":
-                        self.state = "MENU"
-                        # ensure menu music is playing
-                        self._ensure_play_music(menu_music_path, self.volume)
+                        self._go_to_menu(reset_run=False)
 
 
                 elif self.state == "PLAY":
                     if event.type == pygame.KEYDOWN:
                         if event.key == pygame.K_ESCAPE:
-                            self.state = "MENU"
-                            # self._ensure_play_music(menu_music_path, self.volume)
+                            self._go_to_menu(reset_run=False)
                             continue
                         elif event.key == pygame.K_TAB:
                             # Toggle combat only from planning
@@ -387,14 +433,7 @@ class Game:
                     # Handle end screen interactions here so events aren't drained earlier
                     action = self.end_screen.handle_event(event)
                     if action == 'menu':
-                        try:
-                            # Reset to a fresh run (re-roll procedural rounds + starting gold)
-                            self.board.reset_run()
-                        except Exception:
-                            pass
-                        self.state = "MENU"
-                        # ensure menu music is active after returning
-                        self._ensure_play_music(menu_music_path, self.volume)
+                        self._go_to_menu(reset_run=True)
                     elif action == 'exit':
                         sys.exit(0)
 
@@ -410,7 +449,7 @@ class Game:
                 self.settings_screen.draw()
             elif self.state == "PLAY":
                 # ensure play music is active (in case something external changed it)
-                self._ensure_play_music(play_music_path, self.volume)
+                self._ensure_play_music(self.play_music_path, self.volume)
                 self.screen.fill("black")
                 self.board.run()
 
