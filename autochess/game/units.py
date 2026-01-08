@@ -349,6 +349,12 @@ class Unit(pygame.sprite.Sprite):
         self._sim_shot_accum = 0.0
         self._sim_heal_action_accum = 0.0
 
+        # On-hit slow debuff (movement only)
+        # Duration is expressed in frames at the configured FPS, and is decremented using sim_speed.
+        self._hit_slow_frames_remaining = 0
+        self._hit_slow_factor = 0.40
+        self._sim_hit_slow_accum = 0.0
+
         # Apply initial level scaling
         if self.level > 1:
             self._apply_level_scaling(set_full_hp=True)
@@ -590,8 +596,12 @@ class Unit(pygame.sprite.Sprite):
         if dist > 0:
             self.update_facing_direction(dx, dy)
 
-            move_dx = dx / dist * self.speed
-            move_dy = dy / dist * self.speed
+            speed = float(self.speed)
+            if getattr(self, '_hit_slow_frames_remaining', 0) > 0:
+                speed *= float(getattr(self, '_hit_slow_factor', 0.60))
+
+            move_dx = dx / dist * speed
+            move_dy = dy / dist * speed
 
             self.pos.x += move_dx
             self.pos.y += move_dy
@@ -704,6 +714,17 @@ class Unit(pygame.sprite.Sprite):
 
     def take_damage(self, damage):
         """Otrzymaj obrażenia"""
+        # Apply an on-hit movement slow for a short duration.
+        # Refreshes duration if already slowed.
+        try:
+            duration_frames = int(3 * FPS)
+        except Exception:
+            duration_frames = 360
+        try:
+            self._hit_slow_frames_remaining = max(int(getattr(self, '_hit_slow_frames_remaining', 0) or 0), duration_frames)
+        except Exception:
+            self._hit_slow_frames_remaining = duration_frames
+
         self.hp -= damage
         if self.hp <= 0:
             self.die()
@@ -787,6 +808,13 @@ class Unit(pygame.sprite.Sprite):
         """Aktualizacja logiki walki"""
         if not self.alive:
             return
+
+        # Tick on-hit slow timer (movement debuff)
+        if getattr(self, '_hit_slow_frames_remaining', 0) > 0:
+            self._sim_hit_slow_accum += max(0.1, float(getattr(self, 'sim_speed', 1.0)))
+            while self._sim_hit_slow_accum >= 1.0 and self._hit_slow_frames_remaining > 0:
+                self._hit_slow_frames_remaining -= 1
+                self._sim_hit_slow_accum -= 1.0
 
         # Scale cooldowns with sim speed using accumulators
         if self.attack_cooldown > 0:
