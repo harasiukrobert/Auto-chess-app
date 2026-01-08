@@ -54,6 +54,8 @@ class Game:
         self.clock = pygame.time.Clock()
         # Turn-based phases inside PLAY
         self.phase = 'PLANNING'  # 'PLANNING' | 'COMBAT'
+        # Set when the player clicks SURRENDER; resolved in the same place as normal round-end
+        self._surrender_requested = False
         # End screen UI (created lazily later)
         self.end_screen = EndScreen(
             screen=self.screen,
@@ -320,6 +322,11 @@ class Game:
                                 self.board.snapshot_enemy_layout()
                                 self.phase = 'COMBAT'
                                 self.board.hex_manager.toggle_combat()
+                                # Button stays visible; turns into surrender
+                                try:
+                                    self.advance_btn.label = "SURRENDER"
+                                except Exception:
+                                    pass
                     # Handle planning button click before routing to shop
                     if self.phase == 'PLANNING':
                         result = self.advance_btn.handle_event(event)
@@ -329,7 +336,18 @@ class Game:
                             self.board.snapshot_enemy_layout()
                             self.phase = 'COMBAT'
                             self.board.hex_manager.toggle_combat()
+                            try:
+                                self.advance_btn.label = "SURRENDER"
+                            except Exception:
+                                pass
                             # Skip sending this click to the shop
+                            continue
+                    # Handle surrender button click during combat
+                    if self.phase == 'COMBAT':
+                        result = self.advance_btn.handle_event(event)
+                        if result == "clicked":
+                            # Defer resolution to the combat-end section so rollback behaves identically
+                            self._surrender_requested = True
                             continue
                     # route mouse events to shop only in planning phase
                     if self.phase == 'PLANNING':
@@ -370,11 +388,43 @@ class Game:
                 self._ensure_play_music(play_music_path, self.volume)
                 self.screen.fill("black")
                 self.board.run()
+
+                # If player surrendered, resolve as an immediate loss using the same rollback path
+                if self.phase == 'COMBAT' and getattr(self, '_surrender_requested', False):
+                    self._surrender_requested = False
+                    # Reset combat visuals
+                    try:
+                        self.board.hex_manager.toggle_combat()  # back to planning
+                    except Exception:
+                        pass
+                    # Loss: restore last planning layout to retry
+                    self.board.restore_from_pre_planning_snapshot()
+                    # Rebuild enemies from pre-combat snapshot to original positions
+                    try:
+                        self.board.rebuild_enemies_from_snapshot(include_extras=False, round_num=self.board.current_round)
+                    except Exception:
+                        # Fallback to round config if snapshot missing
+                        self.board.respawn_current_round_enemies()
+                    # New planning cycle begins after loss: capture snapshot so future losses
+                    try:
+                        self.board.save_pre_planning_snapshot()
+                    except Exception:
+                        pass
+                    self.phase = 'PLANNING'
+                    try:
+                        self.advance_btn.label = "FIGHT!"
+                    except Exception:
+                        pass
+                # Keep the action button visible in both phases; label depends on phase
+                try:
+                    self.advance_btn.label = "FIGHT!" if self.phase == 'PLANNING' else "SURRENDER"
+                except Exception:
+                    pass
                 if self.phase == 'PLANNING':
                     # Draw shop UI above the board during planning
                     self.shop.draw()
-                    # Draw the advance-to-combat button (UI component)
-                    self.advance_btn.draw()
+                # Draw the action button (FIGHT!/SURRENDER)
+                self.advance_btn.draw()
                 # Draw speed control only during COMBAT phase
                 if self.phase == 'COMBAT':
                     self.speed_ui.draw()
@@ -451,6 +501,10 @@ class Game:
                             except Exception:
                                 pass
                         self.phase = 'PLANNING'
+                        try:
+                            self.advance_btn.label = "FIGHT!"
+                        except Exception:
+                            pass
             elif self.state == "END":
                 # Draw menu background and end screen overlay during END state
                 self.menu_bg.draw()
