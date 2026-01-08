@@ -361,10 +361,8 @@ class Game:
                     action = self.end_screen.handle_event(event)
                     if action == 'menu':
                         try:
-                            # Reset to a fresh run and go back to MENU
-                            self.board.current_round = 1
-                            self.board.apply_round(1, initial=True)
-                            self.board.gold = int(self.board.rounds.starting_gold)
+                            # Reset to a fresh run (re-roll procedural rounds + starting gold)
+                            self.board.reset_run()
                         except Exception:
                             pass
                         self.state = "MENU"

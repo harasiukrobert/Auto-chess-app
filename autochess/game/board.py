@@ -73,6 +73,29 @@ class Board:
             for u in self.units if getattr(u, 'team', None) == 'red'
         ]
 
+    def reset_run(self):
+        """Start a fresh run with newly generated rounds and re-rolled starting gold."""
+        # New procedural round generation (new seed per run)
+        self.rounds = RoundManager()
+        self.current_round = 1
+
+        # Reset gold for player
+        self.gold = int(self.rounds.starting_gold)
+
+        # Reset enemy AI bank
+        try:
+            self._enemy_ai.reset(starting_gold=int(self.rounds.starting_gold))
+        except Exception:
+            pass
+
+        # Rebuild board to round 1
+        self.apply_round(1, initial=True)
+
+        # Snapshot bookkeeping
+        self._planning_snapshot = None
+        self._enemy_snapshot = None
+        self._pre_planning_snapshot = None
+
     def has_free_player_hex(self) -> bool:
         """Return True if at least one player-territory hex is unoccupied.
         Counts only bottom-half (player) hexes as available.
