@@ -9,95 +9,98 @@ from config.setting import *
 UNITS_DATA = {
     'warrior': {
         'name': 'Warrior',
-        'cost': 3,
+        'cost': 2,
         'icon': None,
-        'evolve_multiplier': 1.5,
+        # Per-level additive scaling bonus used by Unit._apply_level_scaling.
+        # Level 1 scale = 1.0, Level 2 scale = 1.0 + bonus, etc.
+        # Kept additive (not exponential) to avoid runaway scaling with unlimited merges.
+        'evolve_multiplier': 1.10,
         # core stats
-        'hp': 25,
-        'damage': 2,
+        'hp': 34,
+        'damage': 3,
         'attack_range': 80,
-        'attack_delay': 80,
-        'speed': 2,
+        'attack_delay': 70,
+        'speed': 1.8,
         'is_ranged': False,
         'anim_speed': 0.10,
         'attack_anim_speed': 0.10,
     },
     'archer': {
         'name': 'Archer',
-        'cost': 3,
+        'cost': 2,
         'icon': None,
-        'evolve_multiplier': 1.5,
+        'evolve_multiplier': 1.05,
         # core stats
-        'hp': 15,
+        'hp': 22,
         'damage': 3,
-        'attack_range': 300,
-        'attack_delay': 120,
+        'attack_range': 320,
+        'attack_delay': 90,
         'speed': 1.5,
         'is_ranged': True,
-        'projectile_speed': 8,
+        'projectile_speed': 9,
         'anim_speed': 0.10,
         'attack_anim_speed': 0.10,
     },
     'lancer': {
         'name': 'Lancer',
-        'cost': 4,
+        'cost': 3,
         'icon': None,
-        'evolve_multiplier': 1.5,
+        'evolve_multiplier': 1.00,
         # core stats
-        'hp': 20,
+        'hp': 30,
         'damage': 4,
         'attack_range': 120,
-        'attack_delay': 100,
-        'speed': 1.5,
+        'attack_delay': 95,
+        'speed': 1.6,
         'is_ranged': False,
         'anim_speed': 0.10,
         'attack_anim_speed': 0.03,
     },
     'assassin': {
         'name': 'Assassin',
-        'cost': 1,
+        'cost': 2,
         'icon': None,
-        'evolve_multiplier': 1.5,
+        'evolve_multiplier': 1.15,
         # core stats
         'hp': 18,
-        'damage': 5,
-        'attack_range': 30,
-        'attack_delay': 50,
-        'speed': 2.0,
+        'damage': 3,
+        'attack_range': 40,
+        'attack_delay': 45,
+        'speed': 2.4,
         'is_ranged': False,
         'anim_speed': 0.10,
         'attack_anim_speed': 0.10,
     },
     'monk': {
         'name': 'Monk',
-        'cost': 5,
+        'cost': 3,
         'icon': None,
-        'evolve_multiplier': 1.5,
+        'evolve_multiplier': 0.85,
         # core stats
         'hp': 18,
         'damage': 1,
         'attack_range': 80,
-        'attack_delay': 60,
+        'attack_delay': 90,
         'speed': 1.5,
         'is_ranged': True,
         'is_healer': True,
         'heal_amount': 3,
-        'heal_range': 150,
-        'heal_delay': 100,
+        'heal_range': 170,
+        'heal_delay': 90,
         'anim_speed': 0.10,
         'attack_anim_speed': 0.10,
     },
     'witch': {
         'name': 'Witch',
-        'cost': 1,
+        'cost': 3,
         'icon': None,
-        'evolve_multiplier': 1.5,
+        'evolve_multiplier': 1.00,
         # core stats
         'hp': 18,
         'damage': 4,
-        'attack_range': 250,
-        'attack_delay': 100,
-        'speed': 1.5,
+        'attack_range': 260,
+        'attack_delay': 105,
+        'speed': 1.4,
         'is_ranged': True,
         'anim_speed': 0.10,
         'attack_anim_speed': 0.10,
@@ -108,9 +111,10 @@ UNITS_DATA = {
 def get_evolve_multiplier(unit_name: str) -> float:
     data = UNITS_DATA.get(unit_name, {})
     try:
-        return float(data.get('evolve_multiplier', 1.5))
+        # Additive bonus per level (see UNITS_DATA comment)
+        return float(data.get('evolve_multiplier', 1.0))
     except Exception:
-        return 1.5
+        return 1.0
 
 # All unit stats now live in UNITS_DATA above
 
@@ -400,41 +404,52 @@ class Unit(pygame.sprite.Sprite):
             self._snap_move_active = False
 
     def _apply_level_scaling(self, set_full_hp: bool = False):
-        """Recalculate stats based on current level and evolve multiplier.
-        Positive stats are multiplied by multiplier^(level-1).
-        For attack_delay (cooldown), we reduce it by the same factor for snappier upgrades.
+        """Recalculate stats based on current level.
+
+        Merge mechanic is 2 units -> 1 unit (same name/level). To avoid the common case where
+        2x level-1 units are stronger than 1x level-2 unit, we scale *output* (damage/heal)
+        and *durability* (HP), and we also reduce action delays slightly.
+
+        We intentionally use additive scaling (not exponential) so repeated merges don't
+        explode stats too hard with unlimited levels.
         """
-        scale = (self.evolve_multiplier ** max(0, self.level - 1))
+
+        lvl = max(1, int(getattr(self, 'level', 1) or 1))
+        bonus = float(getattr(self, 'evolve_multiplier', 1.0) or 0.0)
+        scale = 1.0 + max(0, lvl - 1) * max(0.0, bonus)
+        # Speed up actions, but less aggressively than raw stat scaling.
+        delay_div = max(1.0, math.sqrt(scale))
+        speed_scale = 1.0 + max(0, lvl - 1) * max(0.0, bonus) * 0.12
 
         # HP / damage scale up
         base_hp = self.base_stats.get('hp', self.max_hp)
+        old_max_hp = int(getattr(self, 'max_hp', base_hp) or base_hp)
         self.max_hp = int(round(base_hp * scale))
         if set_full_hp:
             self.hp = self.max_hp
         else:
             # proportionally adjust current hp to new max
-            ratio = max(0.0, min(self.hp / max(1, getattr(self, 'max_hp', base_hp)), 1.0))
+            prev_max = max(1, int(old_max_hp))
+            ratio = max(0.0, min(self.hp / float(prev_max), 1.0))
             self.hp = int(round(self.max_hp * ratio))
 
         # Offensive/utility stats
         if 'damage' in self.base_stats:
             self.damage = int(round(self.base_stats['damage'] * scale))
-        # if 'attack_range' in self.base_stats:
-        #     self.attack_range = float(self.base_stats['attack_range'] * scale)
-        # if 'speed' in self.base_stats:
-        #     self.speed = float(self.base_stats['speed'] * scale)
+        if 'speed' in self.base_stats:
+            self.speed = float(self.base_stats['speed'] * speed_scale)
         if 'projectile_speed' in self.base_stats:
-            self.projectile_speed = float(self.base_stats['projectile_speed'] * scale)
+            self.projectile_speed = float(self.base_stats['projectile_speed'] * (0.75 + 0.25 * scale))
         if 'heal_amount' in self.base_stats:
             self.heal_amount = int(round(self.base_stats['heal_amount'] * scale))
         if 'heal_range' in self.base_stats:
             self.heal_range = float(self.base_stats['heal_range'] * scale)
 
         # Make attacks/heals faster with level (reduce delay)
-        # if 'attack_delay' in self.base_stats:
-        #     self.attack_delay = max(10, int(round(self.base_stats['attack_delay'] / scale)))
-        # if 'heal_delay' in self.base_stats:
-        #     self.heal_delay = max(10, int(round(self.base_stats['heal_delay'] / scale)))
+        if 'attack_delay' in self.base_stats:
+            self.attack_delay = max(10, int(round(self.base_stats['attack_delay'] / delay_div)))
+        if 'heal_delay' in self.base_stats:
+            self.heal_delay = max(10, int(round(self.base_stats['heal_delay'] / delay_div)))
 
     def evolve(self):
         """Increase unit level by 1 and reapply scaled stats. Restores HP to full."""

@@ -10,7 +10,7 @@ ROUND_CONFIG: Dict[str, Any] = {
 
     # Random starting gold range (inclusive)
     "starting_gold_min": 2,
-    "starting_gold_max": 5,
+    "starting_gold_max": 4,
 
     # Random gold reward per completed round.
     # Reward range increases with round number:

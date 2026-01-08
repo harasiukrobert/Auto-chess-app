@@ -27,10 +27,13 @@ class Board:
         self.rounds = RoundManager()
 
         # Gold tracking (from rounds config)
-        self.gold = int(self.rounds.starting_gold)
+        # Player always starts with double the rolled starting gold.
+        self.gold = int(self.rounds.starting_gold) * 2
 
         # Initialize enemy AI with same starting gold as player
         from autochess.ai.enemy_ai import EnemyAI
+
+        # Enemy uses the rolled baseline (not doubled)
         self._enemy_ai = EnemyAI(starting_gold=int(self.rounds.starting_gold))
 
         self.hex_center_pos = hex_center
@@ -80,7 +83,7 @@ class Board:
         self.current_round = 1
 
         # Reset gold for player
-        self.gold = int(self.rounds.starting_gold)
+        self.gold = int(self.rounds.starting_gold) * 2
 
         # Reset enemy AI bank
         try:
