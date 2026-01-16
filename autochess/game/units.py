@@ -2,6 +2,7 @@ import math
 import os
 
 from autochess.utils.config import *
+from autochess.utils.resource import resource_path
 from config.setting import *
 
 # Embedded unit metadata
@@ -130,7 +131,7 @@ class HealEffect(pygame.sprite.Sprite):
         path = f'files/units/{team}_units/monk/Heal_effect.png'
 
         self.frames = []
-        if os.path.exists(path):
+        if os.path.exists(resource_path(path)):
             self.frames = import_img(path, 192)
 
         self.index = 0
@@ -173,7 +174,7 @@ class DamageEffect(pygame.sprite.Sprite):
         path = f'files/units/{team}_units/witch/spell.png'
 
         self.frames = []
-        if os.path.exists(path):
+        if os.path.exists(resource_path(path)):
             self.frames = import_img(path, 192)
 
         self.index = 0
@@ -236,7 +237,16 @@ class Projectile(pygame.sprite.Sprite):
 
     def load_projectile_image(self):
         path = f'files/units/{self.team}_units/{self.unit_name}/bullet.png'
-        return pygame.image.load(path).convert_alpha()
+        resolved = resource_path(path)
+        try:
+            if os.path.exists(resolved):
+                return pygame.image.load(resolved).convert_alpha()
+        except Exception:
+            pass
+        surf = pygame.Surface((18, 6), pygame.SRCALPHA)
+        pygame.draw.rect(surf, (240, 240, 240, 220), (0, 0, 18, 6), border_radius=3)
+        pygame.draw.rect(surf, (40, 40, 40, 220), (0, 0, 18, 6), width=1, border_radius=3)
+        return surf
 
     def update(self):
         if self.hit:
@@ -478,8 +488,20 @@ class Unit(pygame.sprite.Sprite):
         for animation in self.animations.keys():
             pixle_size = 320 if self.name == 'lancer' else 192
             path = f'files/units/{self.team}_units/{self.name}/{animation}.png'
-            if os.path.exists(path):
+            resolved = resource_path(path)
+            if os.path.exists(resolved):
                 self.animations[animation] = import_img(path, pixle_size)
+
+        # Guarantee at least one frame so __init__ doesn't crash when assets are missing.
+        if not self.animations.get('Idle'):
+            fallback = pygame.Surface((64, 64), pygame.SRCALPHA)
+            pygame.draw.rect(fallback, (200, 200, 200, 200), fallback.get_rect(), border_radius=10)
+            pygame.draw.rect(fallback, (30, 30, 30, 220), fallback.get_rect(), width=2, border_radius=10)
+            self.animations['Idle'] = [fallback]
+
+        for key, frames in list(self.animations.items()):
+            if not frames:
+                self.animations[key] = list(self.animations['Idle'])
 
     def get_distance_to(self, other):
         """Oblicz dystans do innej jednostki"""

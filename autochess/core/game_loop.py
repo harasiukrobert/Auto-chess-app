@@ -12,6 +12,7 @@ from autochess.ui.menu import Menu
 from autochess.ui.settings import SettingsScreen
 from autochess.ui.shop import Shop
 from autochess.ui.speed_control import SpeedControl
+from autochess.utils.resource import resource_path
 from config.setting import (BOARD_CENTER_OFFSET_X, BOARD_CENTER_OFFSET_Y,
                             COLOR_BG, COLOR_HIGHLIGHT, COLOR_SUBTLE,
                             COLOR_TEXT, DEFAULT_VOLUME, FPS, MUSIC_PATH,
@@ -112,7 +113,8 @@ class Game:
         except Exception:
             pass
 
-        # Apply fullscreen at startup if settings indicate so (default/saved)
+        # Apply fullscreen at startup only if settings request it.
+        # Default is windowed; see config/user_settings.json and SettingsScreen.DEFAULTS.
         try:
             if self.settings_screen.is_fullscreen():
                 self.apply_fullscreen(True)
@@ -281,9 +283,10 @@ class Game:
                 except Exception:
                     pass
                 return
-            if path and os.path.exists(path):
+            resolved = resource_path(path) if path else None
+            if resolved and os.path.exists(resolved):
                 try:
-                    pygame.mixer.music.load(path)
+                    pygame.mixer.music.load(resolved)
                     pygame.mixer.music.set_volume(vol)
                     pygame.mixer.music.play(-1)  # loop forever
                     self._current_music_path = path
@@ -301,8 +304,9 @@ class Game:
     def _load_music(self, path, vol):
         # Backwards-compatible loader - kept for compatibility with older calls
         try:
-            if os.path.exists(path):
-                pygame.mixer.music.load(path)
+            resolved = resource_path(path) if path else None
+            if resolved and os.path.exists(resolved):
+                pygame.mixer.music.load(resolved)
                 pygame.mixer.music.set_volume(vol)
                 pygame.mixer.music.play(-1)  # loop forever
                 self._current_music_path = path

@@ -4,6 +4,7 @@ from random import choice, randrange
 from pytmx.util_pygame import load_pygame
 
 from autochess.utils.config import *
+from autochess.utils.resource import resource_path
 from config.setting import *
 
 from .hex_board import HexGridManager
@@ -115,7 +116,7 @@ class Board:
     def setup(self):
         self.hex_manager.generate()
 
-        tmx_data = load_pygame('files/map_tiled/map.tmx')
+        tmx_data = load_pygame(resource_path('files/map_tiled/map.tmx'))
         tile_w, tile_h = tmx_data.tilewidth, tmx_data.tileheight
 
         for layer in tmx_data.layernames:

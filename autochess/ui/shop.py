@@ -4,6 +4,7 @@ import random
 import pygame
 
 from autochess.game.units import UNITS_DATA
+from autochess.utils.resource import resource_path
 
 
 class Shop:
@@ -91,13 +92,20 @@ class Shop:
         self.units_data = self._load_units_data()
 
         # Asset paths
-        base_path = os.getcwd()
-        if not os.path.exists(os.path.join(base_path, 'Files')):
-            parent = os.path.dirname(base_path)
-            if os.path.exists(os.path.join(parent, 'Files')):
-                base_path = parent
-
-        self.assets_root = os.path.join(base_path, 'Files', 'ui')
+        # Prefer the unified runtime asset root used across the project.
+        self.assets_root = resource_path(os.path.join('files', 'ui'))
+        if not os.path.exists(self.assets_root):
+            # Dev fallback(s): support the repo's historical 'Files/' directory.
+            alt = resource_path(os.path.join('Files', 'ui'))
+            if os.path.exists(alt):
+                self.assets_root = alt
+            else:
+                base_path = os.getcwd()
+                if not os.path.exists(os.path.join(base_path, 'Files')):
+                    parent = os.path.dirname(base_path)
+                    if os.path.exists(os.path.join(parent, 'Files')):
+                        base_path = parent
+                self.assets_root = os.path.join(base_path, 'Files', 'ui')
         bar_path = os.path.join(self.assets_root, 'shop_bar.png')
         coin_path = os.path.join(self.assets_root, 'coin.png')
 
@@ -118,7 +126,10 @@ class Shop:
 
     def _safe_load_image(self, path, convert_alpha=False):
         try:
-            img = pygame.image.load(path)
+            load_path = path
+            if not os.path.isabs(load_path):
+                load_path = resource_path(load_path)
+            img = pygame.image.load(load_path)
             return img.convert_alpha() if convert_alpha else img.convert()
         except Exception as e:
             return None

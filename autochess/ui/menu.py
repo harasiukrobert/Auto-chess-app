@@ -1,5 +1,9 @@
-import pygame
 import os
+
+import pygame
+
+from autochess.utils.resource import resource_path
+
 
 class Menu:
     def __init__(self, screen, options, font=None, colors=None, logo_path='files/ui/hexa2.png'):
@@ -23,9 +27,10 @@ class Menu:
         for label, _ in self.options:
             key = label.strip().lower()
             path = f'files/ui/buttons/{key}.png'
-            if os.path.exists(path):
+            resolved = resource_path(path)
+            if os.path.exists(resolved):
                 try:
-                    img = pygame.image.load(path).convert_alpha()
+                    img = pygame.image.load(resolved).convert_alpha()
                     self.button_images[key] = img
                 except Exception:
                     # ignore load errors; fallback to drawn buttons
@@ -33,9 +38,10 @@ class Menu:
 
         # Logo
         self.logo = None
-        if os.path.exists(logo_path):
+        logo_resolved = resource_path(logo_path)
+        if os.path.exists(logo_resolved):
             try:
-                raw_logo = pygame.image.load(logo_path).convert_alpha()
+                raw_logo = pygame.image.load(logo_resolved).convert_alpha()
                 max_w = self.screen.get_width() * 0.55
                 scale = min(1.0, max_w / raw_logo.get_width())
                 new_size = (int(raw_logo.get_width() * scale),

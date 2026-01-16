@@ -1,7 +1,10 @@
 import pygame
 
+from autochess.utils.resource import resource_path
+
+
 def import_img(path,pixel_size):
-    img=pygame.image.load(path).convert_alpha()
+    img=pygame.image.load(resource_path(path)).convert_alpha()
     size=img.get_size()
     surface_list=[]
     if size[0]>pixel_size:
@@ -16,7 +19,7 @@ def import_img(path,pixel_size):
         return surface_list
 
 def import_img_two_diff_sizes(path,pixel_size,pixelsize_two):
-    img=pygame.image.load(path).convert_alpha()
+    img=pygame.image.load(resource_path(path)).convert_alpha()
     size=img.get_size()
     surface_list=[]
     if size[0]>pixel_size:

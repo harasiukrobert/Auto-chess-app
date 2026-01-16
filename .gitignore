@@ -7,3 +7,5 @@ venv/
 .DS_Store
 user_settings.json
 .github/copilot-instructions.md
+dist/
+build/

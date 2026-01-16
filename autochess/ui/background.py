@@ -1,5 +1,8 @@
-import pygame
 import os
+
+import pygame
+
+from autochess.utils.resource import resource_path
 
 DEBUG_BG = False  # set True temporarily to print load info
 
@@ -9,7 +12,7 @@ def load_and_cover(path: str, target_size: tuple[int, int]) -> pygame.Surface:
     Center-crops excess.Similar to CSS background-size: cover.
     """
     target_w, target_h = target_size
-    raw = pygame.image.load(path).convert_alpha()
+    raw = pygame.image.load(resource_path(path)).convert_alpha()
     iw, ih = raw.get_width(), raw.get_height()
 
     scale = max(target_w / iw, target_h / ih)
@@ -33,21 +36,22 @@ class BackgroundStatic:
         self.overlay_alpha = overlay_alpha
 
         loaded = False
-        if os.path.exists(image_path):
+        resolved = resource_path(image_path)
+        if os.path.exists(resolved):
             try:
                 self.img = load_and_cover(image_path, (self.w, self.h))
                 loaded = True
             except Exception as e:
                 if DEBUG_BG:
-                    print(f"[BG] Failed to load {image_path}: {e}")
+                    print(f"[BG] Failed to load {resolved}: {e}")
                 self.img = self._fallback()
         else:
             if DEBUG_BG:
-                print(f"[BG] Path not found: {image_path}")
+                print(f"[BG] Path not found: {resolved}")
             self.img = self._fallback()
 
         if DEBUG_BG:
-            print(f"[BG] Loaded={loaded} path={image_path} size={self.img.get_size()} overlay_alpha={self.overlay_alpha}")
+            print(f"[BG] Loaded={loaded} path={resolved} size={self.img.get_size()} overlay_alpha={self.overlay_alpha}")
 
     def _fallback(self):
         surf = pygame.Surface((self.w, self.h))

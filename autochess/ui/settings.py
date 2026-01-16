@@ -1,12 +1,15 @@
-import pygame
 import json
 import os
+
+import pygame
+
+from autochess.utils.resource import resource_path
 
 SETTINGS_PATH = 'config/user_settings.json'
 DEFAULTS = {
     'music_volume': 0.50,
     'sfx_volume': 0.50,
-    'fullscreen': True
+    'fullscreen': False
 }
 
 # ---------- TUNING (change these numbers to reposition & resize UI) ----------
@@ -101,9 +104,10 @@ class SettingsScreen:
         # load options art (if present)
         self.options_art = None
         self.options_art_path = 'files/ui/options_menu.png'
-        if os.path.exists(self.options_art_path):
+        options_art_resolved = resource_path(self.options_art_path)
+        if os.path.exists(options_art_resolved):
             try:
-                raw = pygame.image.load(self.options_art_path).convert_alpha()
+                raw = pygame.image.load(options_art_resolved).convert_alpha()
                 # scale to 50% of screen width while preserving aspect ratio
                 target_w = int(self.w * 0.5)
                 scale = target_w / raw.get_width()
@@ -119,26 +123,34 @@ class SettingsScreen:
         self.x_img = None
 
         try:
-            if os.path.exists('files/ui/slider_fill.png'):
-                self.slider_fill_img = pygame.image.load('files/ui/slider_fill.png').convert_alpha()
+            slider_fill_path = 'files/ui/slider_fill.png'
+            slider_fill_resolved = resource_path(slider_fill_path)
+            if os.path.exists(slider_fill_resolved):
+                self.slider_fill_img = pygame.image.load(slider_fill_resolved).convert_alpha()
         except Exception:
             self.slider_fill_img = None
 
         try:
-            if os.path.exists('files/ui/button_minus.png'):
-                self.btn_minus_img = pygame.image.load('files/ui/button_minus.png').convert_alpha()
+            btn_minus_path = 'files/ui/button_minus.png'
+            btn_minus_resolved = resource_path(btn_minus_path)
+            if os.path.exists(btn_minus_resolved):
+                self.btn_minus_img = pygame.image.load(btn_minus_resolved).convert_alpha()
         except Exception:
             self.btn_minus_img = None
 
         try:
-            if os.path.exists('files/ui/button_plus.png'):
-                self.btn_plus_img = pygame.image.load('files/ui/button_plus.png').convert_alpha()
+            btn_plus_path = 'files/ui/button_plus.png'
+            btn_plus_resolved = resource_path(btn_plus_path)
+            if os.path.exists(btn_plus_resolved):
+                self.btn_plus_img = pygame.image.load(btn_plus_resolved).convert_alpha()
         except Exception:
             self.btn_plus_img = None
 
         try:
-            if os.path.exists('files/ui/x.png'):
-                self.x_img = pygame.image.load('files/ui/x.png').convert_alpha()
+            x_path = 'files/ui/x.png'
+            x_resolved = resource_path(x_path)
+            if os.path.exists(x_resolved):
+                self.x_img = pygame.image.load(x_resolved).convert_alpha()
         except Exception:
             self.x_img = None
 
