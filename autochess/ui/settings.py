@@ -12,35 +12,30 @@ DEFAULTS = {
     'fullscreen': False
 }
 
-# ---------- TUNING (change these numbers to reposition & resize UI) ----------
-# Pixel offsets applied to the computed positions.Change and re-run.
-MUSIC_Y_ADJ = 33           # move music slider up/down (px)
-SFX_Y_ADJ = 14             # move sfx slider up/down (px)
-BAR_X_ADJ = 0              # move both bars left/right (px)
-BAR_WIDTH_ADJ = -50        # expand/shrink bar width (px)
-BAR_HEIGHT_ADJ = 15        # add pixels to slider height (makes slider thicker)
-BUTTON_SIZE_DELTA = 20     # increase minus/plus button size by this many pixels
-LEFT_CIRCLE_X_ADJ = 0      # shift left circular button horizontally (px)
-RIGHT_CIRCLE_X_ADJ = -35   # shift right circular button horizontally (px)
-X_BUTTON_Y_ADJ = -30       # shift the close-X vertically relative to modal (px)
-X_BUTTON_X_ADJ = -20       # shift the close-X horizontally (negative = left)
+MUSIC_Y_ADJ = 33
+SFX_Y_ADJ = 14
+BAR_X_ADJ = 0
+BAR_WIDTH_ADJ = -50
+BAR_HEIGHT_ADJ = 15
+BUTTON_SIZE_DELTA = 20
+LEFT_CIRCLE_X_ADJ = 0
+RIGHT_CIRCLE_X_ADJ = -35
+X_BUTTON_Y_ADJ = -30
+X_BUTTON_X_ADJ = -20
 
-# Discrete-step slider tuning (how many clicks from empty -> full)
-STEPS = 15               # number of discrete steps from 0 -> full (e.g., 10 clicks)
-STEP_PLUS_STEPS = 1      # how many steps the + button increments per click
-STEP_MINUS_STEPS = 1     # how many steps the - button decrements per click
+STEPS = 15
+STEP_PLUS_STEPS = 1
+STEP_MINUS_STEPS = 1
 
-# If True, clicking +/- has no effect when value is already at 0.0 or 1.0 (prevents extra clicks)
 ENFORCE_VISIBLE_LIMIT = True
 
-# Debug mode: press F2 while running to toggle overlay of hit boxes (visual tuning).
 DEBUG_POSITION_MODE = False
-# ---------------------------------------------------------------------
+
 
 class SettingsScreen:
     """
-    Options screen using the art-panel and separate slider-fill / +/- / X assets.
-    See top constants for easy tuning of positions and sizes.
+    Ekran opcji używający panelu graficznego oraz oddzielnych zasobów slider-fill / +/- / X.
+    Zobacz stałe na górze dla łatwego dostrajania pozycji i rozmiarów.
     """
     def __init__(self, screen, volume=None, sfx_volume=None, colors=None, game_ref=None):
         self.screen = screen
@@ -154,7 +149,6 @@ class SettingsScreen:
         except Exception:
             self.x_img = None
 
-        # runtime debug toggle (press F2)
         self.debug = DEBUG_POSITION_MODE
 
     def _load(self):
@@ -185,17 +179,15 @@ class SettingsScreen:
     def is_fullscreen(self):
         return bool(self.settings.get('fullscreen', DEFAULTS['fullscreen']))
 
-    # helpers to compute image + slider geometry
     def image_rect(self):
         """
-        Returns the pygame.Rect of the centered options image (scaled already).
-        If no image, returns centered rect sized at 60% of screen width/height.
+        Zwraca pygame.Rect wycentrowanego obrazu opcji (już przeskalowanego).
+        Jeśli brak obrazu, zwraca wycentrowany rect o rozmiarze 60% szerokości/wysokości ekranu.
         """
         if self.options_art:
             img = self.options_art
             rect = img.get_rect(center=(self.w // 2, self.h // 2))
             return rect
-        # fallback box
         w = int(self.w * 0.6)
         h = int(self.h * 0.6)
         rect = pygame.Rect((self.w - w)//2, (self.h - h)//2, w, h)
@@ -233,8 +225,8 @@ class SettingsScreen:
 
     def _x_button_rect(self, img_rect):
         """
-        Return a rect for the X button using either the x_img size or a fraction of modal.
-        X is centered at bottom of the modal art.
+        Zwraca rect dla przycisku X używając rozmiaru x_img lub ułamka modala.
+        X jest wycentrowany na dole grafiki modala.
         """
         if self.x_img:
             target_w = int(img_rect.width * 0.12) + BUTTON_SIZE_DELTA//2
@@ -255,14 +247,12 @@ class SettingsScreen:
         rel = (mx - bar_rect.left) / float(bar_rect.width)
         return max(0.0, min(1.0, rel))
 
-    # helper: apply integer step deltas and snap to edges (updates both steps + stored float)
     def _apply_step(self, key, delta_steps):
         """
-        Adjusts the stored volume using integer steps.
-        key: 'music_volume' or 'sfx_volume'
-        delta_steps: integer (+1 or -1 or larger)
+        Dostosowuje zapisaną głośność używając kroków całkowitych.
+        key: 'music_volume' lub 'sfx_volume'
+        delta_steps: liczba całkowita (+1 lub -1 lub więcej)
         """
-        # choose which step counter to use
         if key == 'music_volume':
             cur_steps = getattr(self, 'music_steps', int(round(float(self.settings.get('music_volume', 0.0)) * STEPS)))
         else:
@@ -270,11 +260,9 @@ class SettingsScreen:
 
         new_steps = max(0, min(STEPS, cur_steps + int(delta_steps)))
 
-        # If ENFORCE_VISIBLE_LIMIT is on and nothing changes, return early
         if ENFORCE_VISIBLE_LIMIT and new_steps == cur_steps:
             return
 
-        # store step and quantized float
         if key == 'music_volume':
             self.music_steps = new_steps
             new_val = new_steps / float(STEPS)
@@ -286,16 +274,13 @@ class SettingsScreen:
 
     def handle_event(self, event):
         """
-        Returns 'changed' when settings changed, 'back' when user closes options.
+        Zwraca 'changed' gdy ustawienia zostały zmienione, 'back' gdy użytkownik zamyka opcje.
         """
         changed = False
         action = None
 
-        # toggle debug with F2
         if event.type == pygame.KEYDOWN and event.key == pygame.K_F2:
             self.debug = not self.debug
-
-        # keyboard
         if event.type == pygame.KEYDOWN:
             if event.key in (pygame.K_LEFT, pygame.K_a):
                 if self.selected == 0:

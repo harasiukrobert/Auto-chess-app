@@ -17,32 +17,22 @@ class Board:
     def __init__(self, hex_center=(640, 360), allow_enemy_drag: bool = False):
         self.all_sprites = CameraGroup()
         self.units = pygame.sprite.Group()
-        # round state helpers
         self.current_round = 1
-        self._planning_snapshot = None  # stores unit layout and purchases for retry
-        self._enemy_snapshot = None  # stores enemy layout before combat to carry forward
-        # Snapshot taken at the START of each planning phase to allow full rollback on loss
-        # Includes player gold and complete blue roster (names + positions).
+        self._planning_snapshot = None
+        self._enemy_snapshot = None
         self._pre_planning_snapshot = None
 
-        # Rounds configuration (embedded)
         self.rounds = RoundManager()
 
-        # Gold tracking (from rounds config)
-        # Player always starts with double the rolled starting gold.
         self.gold = int(self.rounds.starting_gold) * 2
 
-        # Initialize enemy AI with same starting gold as player
         from autochess.ai.enemy_ai import EnemyAI
 
-        # Enemy uses the rolled baseline (not doubled)
         self._enemy_ai = EnemyAI(starting_gold=int(self.rounds.starting_gold))
 
         self.hex_center_pos = hex_center
-        # Config: allow dragging enemy (red) units during planning
         self.allow_enemy_drag = bool(allow_enemy_drag)
 
-        # Draw hex grid behind other sprites based on Round 1
         r1_size = self.rounds.get_board_size(1)
         self.hex_manager = HexGridManager(
             cols=r1_size.get('cols', 9),
@@ -54,9 +44,7 @@ class Board:
             allow_enemy_drag=self.allow_enemy_drag,
         )
         self.setup()
-        # initialize round 1 contents (grid + player start + enemies)
         self.apply_round(self.current_round, initial=True)
-        # store initial positions/specs for reset (blue team)
         self._initial_positions = {u: (u.rect.centerx, u.rect.centery) for u in self.units}
         self._blue_initial_specs = [
             {
@@ -66,9 +54,7 @@ class Board:
             }
             for u in self.units if getattr(u, 'team', None) == 'blue'
         ]
-        # current round baseline for blue units, updated each planning snapshot
         self._blue_round_base = list(self._blue_initial_specs)
-        # baseline enemy list (red team) captured from current round
         self._enemy_round_base = [
             {
                 'name': u.name,
@@ -79,31 +65,27 @@ class Board:
         ]
 
     def reset_run(self):
-        """Start a fresh run with newly generated rounds and re-rolled starting gold."""
-        # New procedural round generation (new seed per run)
+        """Rozpoczyna nową rozgrywkę z nowo wygenerowanymi rundami i przeliczonym złotem startowym."""
         self.rounds = RoundManager()
         self.current_round = 1
 
-        # Reset gold for player
         self.gold = int(self.rounds.starting_gold) * 2
 
-        # Reset enemy AI bank
         try:
             self._enemy_ai.reset(starting_gold=int(self.rounds.starting_gold))
         except Exception:
             pass
 
-        # Rebuild board to round 1
         self.apply_round(1, initial=True)
 
-        # Snapshot bookkeeping
         self._planning_snapshot = None
         self._enemy_snapshot = None
         self._pre_planning_snapshot = None
 
     def has_free_player_hex(self) -> bool:
-        """Return True if at least one player-territory hex is unoccupied.
-        Counts only bottom-half (player) hexes as available.
+        """
+        Zwraca True jeśli przynajmniej jeden heks w terytorium gracza jest wolny.
+        Liczy tylko heksy z dolnej połowy (gracza) jako dostępne.
         """
         try:
             for hx in self.hex_manager.hexes:
@@ -196,12 +178,10 @@ class Board:
                     Animate(surfs, (base_x - offset_x, base_y - offset_y), self.all_sprites, Layer[layer])
 
     def run(self):
-        # ensure occupancy is initialized once grid generated
         if not getattr(self, '_occ_init_done', False) and getattr(self.hex_manager, 'generated', False):
             self.hex_manager.initialize_occupancy()
             self._occ_init_done = True
         self.hex_manager.update()
-        # Apply sim speed to units only during active combat; otherwise keep 1x
         active_speed = 1.0
         try:
             if self.hex_manager.is_combat_active():
@@ -216,16 +196,13 @@ class Board:
         self.all_sprites.custom_draw()
         self.all_sprites.update()
 
-    # --- Round config application ---
     def _apply_board_size(self, cols: int, rows: int):
-        # Remove previous hex sprites from group
         if hasattr(self, 'hex_manager') and self.hex_manager and self.hex_manager.hexes:
             for hx in list(self.hex_manager.hexes):
                 try:
                     hx.kill()
                 except Exception:
                     pass
-        # Create new grid manager
         self.hex_manager = HexGridManager(
             cols=cols,
             rows=rows,
@@ -238,14 +215,12 @@ class Board:
         self.hex_manager.generate()
 
     def set_allow_enemy_drag(self, enabled: bool):
-        """Enable or disable dragging enemy (red) units during planning for the current game."""
+        """Włącza lub wyłącza przeciąganie jednostek wroga (czerwonych) podczas planowania dla bieżącej gry."""
         self.allow_enemy_drag = bool(enabled)
-        # Propagate to current grid manager
         if hasattr(self, 'hex_manager') and self.hex_manager:
             self.hex_manager.allow_enemy_drag = self.allow_enemy_drag
 
     def _spawn_batch(self, specs, team:  str):
-        # For enemy team, use AI placement
         if team == 'red':
             from autochess.ai.placement import compute_enemy_placement
             specs_with_hexes = compute_enemy_placement(specs, self.hex_manager)
@@ -257,12 +232,9 @@ class Board:
                 if target_hex and self.hex_manager.is_hex_free(target_hex):
                     self.hex_manager.assign_unit_to_hex(u, target_hex)
                 else:
-                    # Fallback
                     if not self.hex_manager.place_unit_on_free_hex_in_territory(u, team):
                         u.kill()
             return
-        # Spawn exactly one unit per item using explicit hex coordinates (r,c).
-        # If a target cell is invalid or occupied, fall back to territory-aware placement.
         for item in specs or []:
             name = item. get('name')
             lvl = int(item.get('lvl', 1)) if isinstance(item, dict) else 1
@@ -284,7 +256,6 @@ class Board:
             except Exception:
                 placed = False
             if not placed:
-                # Use territory-aware placement as fallback
                 placed = self.hex_manager.place_unit_on_free_hex_in_territory(u, team)
             if not placed:
                 u.kill()
@@ -293,10 +264,6 @@ class Board:
         cfg = self.rounds.get_round(round_num) or {}
         size = self.rounds.get_board_size(round_num)
 
-        # When moving to a new round, the grid size can change. If we keep using
-        # old pixel positions, a centered grid expansion will shift units toward
-        # the middle. Capture each blue unit's old hex (r,c) so we can remap it
-        # onto the new grid in a bottom-anchored + horizontally centered way.
         blue_units = []
         old_hex_by_unit = {}
         old_cols = old_rows = None
@@ -307,7 +274,6 @@ class Board:
             except Exception:
                 old_cols = old_rows = None
             blue_units = [u for u in list(self.units) if getattr(u, 'team', None) == 'blue']
-            # Prefer occupancy mapping (exact); fall back to nearest hex.
             for u in blue_units:
                 key = None
                 try:
@@ -320,8 +286,6 @@ class Board:
                     key = None
                 if key is None:
                     try:
-                        # Prefer searching within player territory so we don't accidentally
-                        # snap to an enemy-side hex when determining the formation.
                         bx, by = u.rect.center
                         best_hx = None
                         best_d = None
@@ -338,25 +302,18 @@ class Board:
                         key = None
                 old_hex_by_unit[u] = key
 
-        # Apply board size
         self._apply_board_size(size.get('cols', 9), size.get('rows', 6))
 
-        # On initial round, clear all units; otherwise keep player units
         if initial:
             for u in list(self.units):
                 u.kill()
-            # spawn player starting units (round 1 only)
             pstart = self.rounds.get_player_start()
             self._spawn_batch(pstart, team='blue')
         else:
-            # Remap blue units from old grid coordinates to new grid coordinates.
-            # - Vertical: keep distance from the bottom so formations stay near bottom when rows grow.
-            # - Horizontal: keep offsets from center so formations stay centered when cols grow.
             new_cols = int(getattr(self.hex_manager, 'cols', 0) or 0)
             new_rows = int(getattr(self.hex_manager, 'rows', 0) or 0)
 
             def _round_half_away_from_zero(v: float) -> int:
-                # Python's round() is bankers rounding; we want predictable centering.
                 if v >= 0:
                     return int(math.floor(v + 0.5))
                 return int(math.ceil(v - 0.5))
@@ -367,14 +324,12 @@ class Board:
                         return hx
                 return None
 
-            # Clear occupancy map in the new grid before re-assigning.
             try:
                 for k in list(self.hex_manager.occupancy.keys()):
                     self.hex_manager.occupancy[k] = None
             except Exception:
                 pass
 
-            # Place in a stable order (bottom-first) to reduce collision chaos.
             placement_order = []
             for u in blue_units:
                 key = old_hex_by_unit.get(u)
@@ -392,16 +347,12 @@ class Board:
                 if key is not None and old_cols and old_rows and new_cols and new_rows:
                     try:
                         r0, c0 = int(key[0]), int(key[1])
-                        # Bottom anchoring: preserve distance from bottom row.
                         dist_from_bottom = (old_rows - 1) - r0
                         r1 = (new_rows - 1) - dist_from_bottom
 
-                        # Horizontal centering: preserve offsets from board center.
-                        # Use a doubled integer center to keep half-steps when widths are even.
                         offset2 = (2 * c0) - (old_cols - 1)
                         c1 = _round_half_away_from_zero(((new_cols - 1) + offset2) / 2.0)
 
-                        # Clamp to grid.
                         r1 = max(0, min(new_rows - 1, int(r1)))
                         c1 = max(0, min(new_cols - 1, int(c1)))
 
@@ -411,7 +362,6 @@ class Board:
                     except Exception:
                         target_hex = None
 
-                # If mapped cell is invalid/occupied/not in player territory, find nearest free player hex.
                 if target_hex is not None:
                     try:
                         if (not self.hex_manager.is_player_territory(target_hex)) or (not self.hex_manager.is_hex_free(target_hex)):
@@ -420,8 +370,6 @@ class Board:
                         target_hex = None
 
                 if target_hex is None:
-                    # Choose the closest free player-territory hex to the *intended* mapped center.
-                    # This avoids drifting toward the middle when the board grows.
                     try:
                         if desired_center is None:
                             desired_center = u.rect.center
@@ -442,36 +390,28 @@ class Board:
                         placed = False
 
                 if not placed:
-                    # Last resort: any free hex in player territory.
                     try:
                         self.hex_manager.place_unit_on_free_hex_in_territory(u, team='blue')
                     except Exception:
                         pass
 
-        # Always kill existing red units (they'll be respawned from AI roster)
         for u in list(self.units):
             if getattr(u, 'team', None) == 'red':
                 u.kill()
 
-        # Handle enemy units via AI
         if initial:
-            # First round: reset AI and let it buy fresh
             self._enemy_ai.reset(starting_gold=int(self.rounds.starting_gold))
-            # AI shops for initial units
             new_enemies = self._enemy_ai.shop_for_round(round_num)
             self._spawn_batch(new_enemies, team='red')
         else:
-            # Subsequent rounds:
-            # 1. AI shops for NEW units (adds to existing roster)
             new_enemies = self._enemy_ai.shop_for_round(round_num)
 
-            # 2. Respawn the ENTIRE AI roster (all units, not just new ones)
             self._spawn_batch(self._enemy_ai.roster, team='red')
 
-    # --- Round helpers ---
     def snapshot_planning_layout(self):
-        """Deprecated partial snapshot kept for backward compatibility.
-        Previously stored positions keyed by unit objects. No longer used for rollback.
+        """
+        Przestarzały częściowy snapshot zachowany dla wstecznej kompatybilności.
+        Wcześniej przechowywał pozycje kluczowane po obiektach jednostek. Nie używany do cofania.
         """
         self._planning_snapshot = {
             'positions': {u: (u.rect.centerx, u.rect.centery) for u in self.units if u.alive},
@@ -479,9 +419,10 @@ class Board:
         }
 
     def save_pre_planning_snapshot(self):
-        """Capture gold and full blue roster at the start of planning.
-        This snapshot is used to rollback the player's state on a loss,
-        effectively refunding all current-round purchases and placements.
+        """
+        Zapisuje złoto i pełny roster niebieskich jednostek na początku planowania.
+        Ten snapshot służy do cofnięcia stanu gracza przy przegranej,
+        efektywnie zwracając wszystkie zakupy i ustawienia z bieżącej rundy.
         """
         blue_specs = [
             {'name': u.name, 'pos': (u.rect.centerx, u.rect.centery), 'lvl': int(getattr(u, 'level', 1))}
@@ -493,31 +434,30 @@ class Board:
         }
 
     def finalize_planning_baseline(self):
-        """Freeze current blue roster as the baseline carried into next round on win."""
+        """Zamraża bieżący roster niebieskich jako bazę przenoszoną do następnej rundy przy wygranej."""
         self._blue_round_base = [
             {'name': u.name, 'pos': (u.rect.centerx, u.rect.centery), 'lvl': int(getattr(u, 'level', 1))}
             for u in self.units if getattr(u, 'team', None) == 'blue'
         ]
 
     def snapshot_enemy_layout(self):
-        """Save current enemy configuration to carry forward to next round."""
+        """Zapisuje bieżącą konfigurację wrogów do przeniesienia do następnej rundy."""
         self._enemy_snapshot = [
             {'name': u.name, 'pos': (u.rect.centerx, u.rect.centery), 'lvl': int(getattr(u, 'level', 1))}
             for u in self.units if getattr(u, 'team', None) == 'red'
         ]
 
     def rebuild_enemies_from_snapshot(self, include_extras=False, round_num: int = 1):
-        """Recreate enemies strictly from the latest snapshot.
-        Optionally include per-round extras. Used on loss to ensure enemies return
-        to their planning positions instead of death positions.
+        """
+        Odtwarza wrogów ściśle z ostatniego snapshotu.
+        Opcjonalnie dołącza dodatkowych wrogów per runda. Używane przy przegranej,
+        aby wrogowie wrócili na pozycje planowania zamiast pozycji śmierci.
         """
         base = self._enemy_snapshot if self._enemy_snapshot is not None else self._enemy_round_base
-        # remove all current red units
         for u in list(self.units):
             if getattr(u, 'team', None) == 'red':
                 u.kill()
         recreated = []
-        # recreate snapshot enemies at their center positions
         for spec in base:
             lvl = int(spec.get('lvl', 1))
             new_u = Unit(groups=[self.all_sprites, self.units], pos=spec['pos'], name=spec['name'], team='red', level=lvl)
@@ -542,20 +482,17 @@ class Board:
         self.hex_manager.initialize_occupancy()
 
     def restore_from_pre_planning_snapshot(self):
-        """Fully restore blue roster and gold to the snapshot from planning start."""
+        """W pełni przywraca roster niebieskich i złoto do snapshotu z początku planowania."""
         snap = self._pre_planning_snapshot
         if not snap:
             return
-        # Restore gold (refund purchases)
         try:
             self.gold = int(snap.get('gold', self.gold))
         except Exception:
             pass
-        # Remove all current blue units
         for u in list(self.units):
             if getattr(u, 'team', None) == 'blue':
                 u.kill()
-        # Recreate blue units from snapshot
         for spec in snap.get('blue_specs', []):
             lvl = int(spec.get('lvl', 1))
             new_u = Unit(groups=[self.all_sprites, self.units], pos=spec['pos'], name=spec['name'], team='blue', level=lvl)
@@ -563,16 +500,13 @@ class Board:
             new_u.sync_pos_from_rect()
             new_u.hitbox = new_u.rect.copy().inflate(-new_u.rect.width * 0.7, -new_u.rect.height * 0.7)
             self._reset_unit_state(new_u)
-        # Refresh occupancy after rebuild
         self.hex_manager.initialize_occupancy()
 
     def reset_units_to_initial(self):
-        """Rebuild player (blue) units to the latest planning baseline for the next round."""
-        # remove all current blue units
+        """Odbudowuje jednostki gracza (niebieskie) do ostatniej bazy planowania dla następnej rundy."""
         for u in list(self.units):
             if getattr(u, 'team', None) == 'blue':
                 u.kill()
-        # recreate from round baseline
         for spec in self._blue_round_base:
             lvl = int(spec.get('lvl', 1))
             new_u = Unit(groups=[self.all_sprites, self.units], pos=spec['pos'], name=spec['name'], team='blue', level=lvl)
@@ -580,15 +514,14 @@ class Board:
             new_u.sync_pos_from_rect()
             new_u.hitbox = new_u.rect.copy().inflate(-new_u.rect.width * 0.7, -new_u.rect.height * 0.7)
             self._reset_unit_state(new_u)
-        # refresh occupancy after rebuild
         self.hex_manager.initialize_occupancy()
 
     def add_enemies_for_round(self, round_num: int):
-        """Deprecated: now driven by rounds config. Kept for compatibility."""
+        """Przestarzałe: teraz sterowane przez konfigurację rund. Zachowane dla kompatybilności."""
         self.apply_round(round_num, initial=False)
 
     def respawn_current_round_enemies(self):
-        """Respawn enemies strictly from current round config (used on loss)."""
+        """Odtwarza wrogów ściśle z bieżącej konfiguracji rundy (używane przy przegranej)."""
         self.apply_round(self.current_round, initial=False)
 
     def get_round_reward(self, round_num: int) -> int:
@@ -600,7 +533,7 @@ class Board:
         return blue, red
 
     def _reset_unit_state(self, u):
-        """Clear combat/animation flags and cooldowns to prevent freeze."""
+        """Czyści flagi walki/animacji i cooldowny, aby zapobiec zamrożeniu."""
         u.status = 'Idle'
         u.attack_cooldown = 0
         u.heal_cooldown = 0
@@ -615,11 +548,11 @@ class Board:
         u.target = None
 
     def spawn_blue_unit(self, name: str, pos:  tuple[int, int]):
-        """Create a new blue unit and place it on the closest free hex in player territory.
-        Important: Do not add the unit to any group until a free hex is found,
-        so it never appears under the shop overlay.
         """
-        # Determine the closest free hex to the click position WITHIN PLAYER TERRITORY
+        Tworzy nową niebieską jednostkę i umieszcza ją na najbliższym wolnym heksie w terytorium gracza.
+        Ważne: Nie dodawaj jednostki do żadnej grupy, dopóki nie znajdziesz wolnego heksu,
+        aby nigdy nie pojawiła się pod nakładką sklepu.
+        """
         free_hexes = [
             hx for hx in self.hex_manager.hexes
             if self.hex_manager. is_hex_free(hx) and self.hex_manager. is_player_territory(hx)
@@ -631,14 +564,12 @@ class Board:
             key=lambda hh: (hh.rect.centerx - pos[0]) ** 2 + (hh.rect.centery - pos[1]) ** 2
         )
 
-        # Create the unit only now, once we know we can place it
         u = Unit(groups=[self.all_sprites, self.units], pos=chosen_hex. rect.center, name=name, team='blue')
         u.rect.center = chosen_hex.rect.center
         u.sync_pos_from_rect()
         u.hitbox = u.rect. copy().inflate(-u.rect.width * 0.7, -u.rect. height * 0.7)
         self._reset_unit_state(u)
 
-        # Assign to occupancy map for that hex (guaranteed free)
         self.hex_manager.assign_unit_to_hex(u, chosen_hex)
         return u
 
@@ -656,21 +587,17 @@ class CameraGroup(pygame.sprite.Group):
         max_hp = max(1, sprite.max_hp)
         ratio = max(0, min(sprite.hp / max_hp, 1))
 
-        # Szerokość dopasowana do jednostki (lekko mniejsza niż sprite)
         base_width = sprite.rect.width
         bar_width = int(base_width * 0.9)
         bar_width = max(30, min(bar_width, 80))
         bar_height = 5
 
         bar_x = sprite.rect.centerx - bar_width // 2
-        # Pasek przesunięty wyżej względem sprite'a (top - 40)
         bar_y = sprite.rect.top + 40
 
         bg_rect = pygame.Rect(bar_x, bar_y, bar_width, bar_height)
 
-        # Kolor wypełnienia zależny od drużyny i poziomu HP
         if hasattr(sprite, 'team') and sprite.team == 'red':
-            # AI – czerwony pasek, od jasnego do ciemnego odcienia w zależności od HP
             if ratio > 0.5:
                 fill_color = (220, 60, 60)
             elif ratio > 0.2:
@@ -678,7 +605,6 @@ class CameraGroup(pygame.sprite.Group):
             else:
                 fill_color = (150, 20, 20)
         else:
-            # Gracz / inne – niebieski pasek, jaśniejszy przy wysokim HP
             if ratio > 0.5:
                 fill_color = (50, 150, 255)
             elif ratio > 0.2:
@@ -686,7 +612,6 @@ class CameraGroup(pygame.sprite.Group):
             else:
                 fill_color = (20, 70, 150)
 
-        # Tło (ciemne) + wypełnienie
         pygame.draw.rect(self.display_surf, (20, 20, 20), bg_rect)
 
         fg_width = int(bar_width * ratio)
@@ -694,7 +619,6 @@ class CameraGroup(pygame.sprite.Group):
             fg_rect = pygame.Rect(bar_x, bar_y, fg_width, bar_height)
             pygame.draw.rect(self.display_surf, fill_color, fg_rect)
 
-        # Wspólna, cienka czarna ramka dla wszystkich jednostek
         pygame.draw.rect(self.display_surf, (0, 0, 0), bg_rect, 1)
 
         # Draw level indicator (stars) above the HP bar

@@ -4,12 +4,12 @@ import pygame
 
 from autochess.utils.resource import resource_path
 
-DEBUG_BG = False  # set True temporarily to print load info
+DEBUG_BG = False
 
 def load_and_cover(path: str, target_size: tuple[int, int]) -> pygame.Surface:
     """
-    Load an image and scale it to cover target_size while preserving aspect ratio.
-    Center-crops excess.Similar to CSS background-size: cover.
+    Ładuje obraz i skaluje go do pokrycia target_size z zachowaniem proporcji.
+    Przycina nadmiar od środka. Podobne do CSS background-size: cover.
     """
     target_w, target_h = target_size
     raw = pygame.image.load(resource_path(path)).convert_alpha()
@@ -28,7 +28,7 @@ def load_and_cover(path: str, target_size: tuple[int, int]) -> pygame.Surface:
 
 class BackgroundStatic:
     """
-    Static background: loads one image and draws it with optional dark overlay.
+    Statyczne tło: ładuje jeden obraz i rysuje go z opcjonalną ciemną nakładką.
     """
     def __init__(self, screen, image_path: str, overlay_alpha: int = 30):
         self.screen = screen

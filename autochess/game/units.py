@@ -5,18 +5,12 @@ from autochess.utils.config import *
 from autochess.utils.resource import resource_path
 from config.setting import *
 
-# Embedded unit metadata
-# Used for shop costs and evolve multipliers
 UNITS_DATA = {
     'warrior': {
         'name': 'Warrior',
         'cost': 2,
         'icon': None,
-        # Per-level additive scaling bonus used by Unit._apply_level_scaling.
-        # Level 1 scale = 1.0, Level 2 scale = 1.0 + bonus, etc.
-        # Kept additive (not exponential) to avoid runaway scaling with unlimited merges.
         'evolve_multiplier': 1.10,
-        # core stats
         'hp': 34,
         'damage': 3,
         'attack_range': 80,
@@ -31,7 +25,6 @@ UNITS_DATA = {
         'cost': 2,
         'icon': None,
         'evolve_multiplier': 1.05,
-        # core stats
         'hp': 22,
         'damage': 3,
         'attack_range': 320,
@@ -47,7 +40,6 @@ UNITS_DATA = {
         'cost': 3,
         'icon': None,
         'evolve_multiplier': 1.10,
-        # core stats
         'hp': 40,
         'damage': 5,
         'attack_range': 120,
@@ -62,7 +54,6 @@ UNITS_DATA = {
         'cost': 5,
         'icon': None,
         'evolve_multiplier': 1.08,
-        # core stats
         'hp': 14,
         'damage': 2,
         'attack_range': 40,
@@ -77,7 +68,6 @@ UNITS_DATA = {
         'cost': 3,
         'icon': None,
         'evolve_multiplier': 0.85,
-        # core stats
         'hp': 18,
         'damage': 1,
         'attack_range': 80,
@@ -96,7 +86,6 @@ UNITS_DATA = {
         'cost': 3,
         'icon': None,
         'evolve_multiplier': 1.00,
-        # core stats
         'hp': 18,
         'damage': 4,
         'attack_range': 260,
@@ -112,12 +101,10 @@ UNITS_DATA = {
 def get_evolve_multiplier(unit_name: str) -> float:
     data = UNITS_DATA.get(unit_name, {})
     try:
-        # Additive bonus per level (see UNITS_DATA comment)
         return float(data.get('evolve_multiplier', 1.0))
     except Exception:
         return 1.0
 
-# All unit stats now live in UNITS_DATA above
 
 
 class HealEffect(pygame.sprite.Sprite):
@@ -285,7 +272,6 @@ class Unit(pygame.sprite.Sprite):
 
         stats = UNITS_DATA.get(name, UNITS_DATA['warrior'])
 
-        # Store base stats for level scaling
         self.base_stats = dict(stats)
 
         self.max_hp = stats['hp']
@@ -328,7 +314,6 @@ class Unit(pygame.sprite.Sprite):
         self.heal_target = None
         self.heal_action_delay = 0
 
-        # Level/evolution
         try:
             self.level = max(1, int(level))
         except Exception:
@@ -344,35 +329,28 @@ class Unit(pygame.sprite.Sprite):
         self.z = z
         self.hitbox = self.rect.copy().inflate(-self.rect.width * 0.7, -self.rect.height * 0.7)
 
-        # Planning-phase smooth placement (snap-to-hex) animation.
-        # Uses frame-based interpolation (no dt in current loop).
         self._snap_move_active = False
         self._snap_move_start = pygame.math.Vector2(self.rect.center)
         self._snap_move_target = pygame.math.Vector2(self.rect.center)
         self._snap_move_elapsed = 0
         self._snap_move_total = 0
-        # Simulation speed (set by board depending on combat state)
         self.sim_speed = 1.0
-        # fractional accumulators for timing tied to frames
         self._sim_attack_cd_accum = 0.0
         self._sim_heal_cd_accum = 0.0
         self._sim_shot_accum = 0.0
         self._sim_heal_action_accum = 0.0
 
-        # On-hit slow debuff (movement only)
-        # Duration is expressed in frames at the configured FPS, and is decremented using sim_speed.
         self._hit_slow_frames_remaining = 0
         self._hit_slow_factor = 0.40
         self._sim_hit_slow_accum = 0.0
 
-        # Apply initial level scaling
         if self.level > 1:
             self._apply_level_scaling(set_full_hp=True)
 
     def start_snap_move(self, target_center, frames: int = 10):
-        """Animate unit center to target_center over a small number of frames.
-
-        Intended for planning/drag placement. Does not change combat behavior.
+        """
+        Animuje środek jednostki do target_center przez małą liczbę klatek.
+        Przeznaczone dla planowania/przeciągania. Nie zmienia zachowania walki.
         """
         try:
             tx, ty = int(target_center[0]), int(target_center[1])
@@ -405,7 +383,6 @@ class Unit(pygame.sprite.Sprite):
         self._snap_move_elapsed = elapsed
 
         t = min(1.0, elapsed / float(total))
-        # Smoothstep easing for a small but pleasant glide
         t_ease = t * t * (3.0 - 2.0 * t)
 
         start = getattr(self, '_snap_move_start', pygame.math.Vector2(self.rect.center))
@@ -420,36 +397,31 @@ class Unit(pygame.sprite.Sprite):
             self._snap_move_active = False
 
     def _apply_level_scaling(self, set_full_hp: bool = False):
-        """Recalculate stats based on current level.
-
-        Merge mechanic is 2 units -> 1 unit (same name/level). To avoid the common case where
-        2x level-1 units are stronger than 1x level-2 unit, we scale *output* (damage/heal)
-        and *durability* (HP), and we also reduce action delays slightly.
-
-        We intentionally use additive scaling (not exponential) so repeated merges don't
-        explode stats too hard with unlimited levels.
+        """
+        Przelicza statystyki na podstawie bieżącego poziomu.
+        Mechanika łączenia to 2 jednostki -> 1 jednostka (ta sama nazwa/poziom).
+        Aby uniknąć sytuacji, gdy 2x jednostki poziomu 1 są silniejsze niż 1x jednostka poziomu 2,
+        skalujemy obrażenia/leczenie i wytrzymałość (HP), a także nieco redukujemy opóźnienia akcji.
+        Celowo używamy skalowania addytywnego (nie wykładniczego), aby powtarzane łączenia
+        nie eskalowały statystyk zbyt mocno przy nieograniczonych poziomach.
         """
 
         lvl = max(1, int(getattr(self, 'level', 1) or 1))
         bonus = float(getattr(self, 'evolve_multiplier', 1.0) or 0.0)
         scale = 1.0 + max(0, lvl - 1) * max(0.0, bonus)
-        # Speed up actions, but less aggressively than raw stat scaling.
         delay_div = max(1.0, math.sqrt(scale))
         speed_scale = 1.0 + max(0, lvl - 1) * max(0.0, bonus) * 0.12
 
-        # HP / damage scale up
         base_hp = self.base_stats.get('hp', self.max_hp)
         old_max_hp = int(getattr(self, 'max_hp', base_hp) or base_hp)
         self.max_hp = int(round(base_hp * scale))
         if set_full_hp:
             self.hp = self.max_hp
         else:
-            # proportionally adjust current hp to new max
             prev_max = max(1, int(old_max_hp))
             ratio = max(0.0, min(self.hp / float(prev_max), 1.0))
             self.hp = int(round(self.max_hp * ratio))
 
-        # Offensive/utility stats
         if 'damage' in self.base_stats:
             self.damage = int(round(self.base_stats['damage'] * scale))
         if 'speed' in self.base_stats:
@@ -461,14 +433,13 @@ class Unit(pygame.sprite.Sprite):
         if 'heal_range' in self.base_stats:
             self.heal_range = float(self.base_stats['heal_range'] * scale)
 
-        # Make attacks/heals faster with level (reduce delay)
         if 'attack_delay' in self.base_stats:
             self.attack_delay = max(10, int(round(self.base_stats['attack_delay'] / delay_div)))
         if 'heal_delay' in self.base_stats:
             self.heal_delay = max(10, int(round(self.base_stats['heal_delay'] / delay_div)))
 
     def evolve(self):
-        """Increase unit level by 1 and reapply scaled stats. Restores HP to full."""
+        """Zwiększa poziom jednostki o 1 i ponownie stosuje skalowane statystyki. Przywraca HP do pełna."""
         self.level = int(self.level) + 1
         self._apply_level_scaling(set_full_hp=True)
 
@@ -492,7 +463,6 @@ class Unit(pygame.sprite.Sprite):
             if os.path.exists(resolved):
                 self.animations[animation] = import_img(path, pixle_size)
 
-        # Guarantee at least one frame so __init__ doesn't crash when assets are missing.
         if not self.animations.get('Idle'):
             fallback = pygame.Surface((64, 64), pygame.SRCALPHA)
             pygame.draw.rect(fallback, (200, 200, 200, 200), fallback.get_rect(), border_radius=10)
@@ -522,18 +492,12 @@ class Unit(pygame.sprite.Sprite):
         if not enemies:
             return None
 
-        # Default: pick nearest enemy.
-        # Special-case assassin: prefer ranged/healer and deeper backline targets.
         if getattr(self, 'name', None) != 'assassin':
             return min(enemies, key=self.get_distance_to)
 
         def _is_backline_priority(u: 'Unit') -> bool:
-            # Treat healers as backline priority too.
             return bool(getattr(u, 'is_ranged', False) or getattr(u, 'is_healer', False))
 
-        # Backline heuristic based on team orientation:
-        # - Red team generally spawns at the top (smaller y). Backline => smaller y.
-        # - Blue team generally spawns at the bottom (larger y). Backline => larger y.
         def _assassin_key(u: 'Unit'):
             ranged_or_healer_first = 0 if _is_backline_priority(u) else 1
             y = u.rect.centery
@@ -635,7 +599,6 @@ class Unit(pygame.sprite.Sprite):
         """Wystrzel pocisk w kierunku celu"""
         start_pos = self.rect.center
 
-        # Add projectile only to visual group (exclude units group to avoid drag logic)
         projectile = Projectile(
             groups=[self.groups_ref[0]],
             start_pos=start_pos,
@@ -649,7 +612,6 @@ class Unit(pygame.sprite.Sprite):
 
     def spawn_heal_effect(self, target):
         """Stwórz efekt leczenia na celu"""
-        # Add heal effect only to visual group (exclude units group)
         HealEffect(
             groups=[self.groups_ref[0]],
             target=target,
@@ -679,7 +641,6 @@ class Unit(pygame.sprite.Sprite):
             self.pending_shot = True
             self.shot_target = target
             attack_anim = self.get_attack_animation()
-            # If animations not loaded yet or empty, be safe
             if self.animations[attack_anim]:
                 anim_length = len(self.animations[attack_anim])
                 self.shot_delay = int(anim_length * 0.7 / self.attack_anim_speed)
@@ -736,8 +697,6 @@ class Unit(pygame.sprite.Sprite):
 
     def take_damage(self, damage):
         """Otrzymaj obrażenia"""
-        # Apply an on-hit movement slow for a short duration.
-        # Refreshes duration if already slowed.
         try:
             duration_frames = int(3 * FPS)
         except Exception:
@@ -768,7 +727,6 @@ class Unit(pygame.sprite.Sprite):
         else:
             current_speed = self.anim_speed
 
-        # Scale animation speed with simulation speed
         self.index += current_speed * max(0.1, float(getattr(self, 'sim_speed', 1.0)))
 
         current_anim = self.animations[self.status]
@@ -794,7 +752,6 @@ class Unit(pygame.sprite.Sprite):
         self.image = frame
 
         if self.pending_shot:
-            # Scale action delay with sim speed using accumulator
             self._sim_shot_accum += max(0.1, float(getattr(self, 'sim_speed', 1.0)))
             while self._sim_shot_accum >= 1.0 and self.shot_delay > 0:
                 self.shot_delay -= 1
@@ -831,14 +788,12 @@ class Unit(pygame.sprite.Sprite):
         if not self.alive:
             return
 
-        # Tick on-hit slow timer (movement debuff)
         if getattr(self, '_hit_slow_frames_remaining', 0) > 0:
             self._sim_hit_slow_accum += max(0.1, float(getattr(self, 'sim_speed', 1.0)))
             while self._sim_hit_slow_accum >= 1.0 and self._hit_slow_frames_remaining > 0:
                 self._hit_slow_frames_remaining -= 1
                 self._sim_hit_slow_accum -= 1.0
 
-        # Scale cooldowns with sim speed using accumulators
         if self.attack_cooldown > 0:
             self._sim_attack_cd_accum += max(0.1, float(getattr(self, 'sim_speed', 1.0)))
             while self._sim_attack_cd_accum >= 1.0 and self.attack_cooldown > 0:

@@ -2,8 +2,6 @@ import math
 
 import pygame
 
-# Hex grid geometry. Keep unit sprites unchanged; only shrink the grid footprint.
-# 0.9 => ~10% smaller hexes.
 HEX_SCALE = 0.9
 BASE_HEX_RADIUS = 64
 BASE_HEX_MARGIN = 5
@@ -14,11 +12,9 @@ WAVE_SPEED = 10
 HEX_COLOR = (128, 128, 128, 100)
 HEX_BORDER_COLOR = (64, 64, 64)
 HEX_BORDER_WIDTH = 3
-# Drag colors used during unit dragging (no alpha overlay)
 DRAG_FREE_COLOR = (128, 128, 128, 100)
 DRAG_OCCUPIED_COLOR = (64, 64, 64, 150)
 MERGE_TARGET_COLOR = (60, 180, 75, 160)
-# Enemy territory color (subtle red) - shown when dragging to indicate blocked area
 ENEMY_TERRITORY_COLOR = (200, 60, 60, 120)
 
 
@@ -33,7 +29,7 @@ class HexSprite(pygame.sprite.Sprite):
         self.z = layer
 
         self.scale = 0.0
-        self.dynamic_color = None  # temporary override fill color during drag
+        self.dynamic_color = None
         self.active = False
         self.dist_from_center = 0
         self.shrinking = False
@@ -71,7 +67,6 @@ class HexSprite(pygame.sprite.Sprite):
 
     def update(self):
         """Aktualizuj animację heksa"""
-        # original scale animation
         scale_changed = False
         if self.shrinking:
             if self.scale > 0.0:
@@ -85,7 +80,6 @@ class HexSprite(pygame.sprite.Sprite):
                 if self.scale > 1.0:
                     self.scale = 1.0
                 scale_changed = True
-        # Force redraw if scale changed OR an overlay is currently applied
         if scale_changed or self.dynamic_color is not None:
             self.redraw()
 
@@ -107,8 +101,6 @@ class HexSprite(pygame.sprite.Sprite):
         pygame.draw.polygon(self.image, base_color, current_points)
         pygame.draw.polygon(self.image, HEX_BORDER_COLOR, current_points, HEX_BORDER_WIDTH)
 
-        # Simple anti-aliasing pass for the outline. This doesn't change the
-        # thickness (still controlled by HEX_BORDER_WIDTH) but smooths jagged edges.
         pygame.draw.aalines(self.image, HEX_BORDER_COLOR, True, current_points)
 
 
@@ -124,8 +116,6 @@ class HexGridManager:
         self.hexes = []
         self.units = units
         self.selected_unit = None
-        # When False (default), enemy (red) units cannot be dragged in planning.
-        # Can be enabled for custom modes without removing existing functionality.
         self.allow_enemy_drag = allow_enemy_drag
 
         self.wave_radius = 0
@@ -136,18 +126,14 @@ class HexGridManager:
         self.shrink_wave_radius = 0
         self.shrinking_started = False
         self.grid_fully_hidden = False
-        # occupancy map: (r,c) -> Unit or None
         self.occupancy = {}
-        # previous position for dragged unit to revert if drop invalid
         self._drag_prev_center = None
-        # previous hex key to revert precisely back to original hex
         self._drag_prev_hex_key = None
-        # Simulation speed control (combat only)
         self.sim_speed = 1.0
         self._sim_fraction_accum = 0.0
 
     def set_sim_speed(self, value: float):
-        """Set simulation speed multiplier for combat updates."""
+        """Ustawia mnożnik prędkości symulacji dla aktualizacji walki."""
         try:
             v = float(value)
         except Exception:
@@ -160,16 +146,16 @@ class HexGridManager:
         self.sim_speed = v
 
     def is_player_territory(self, hex_sprite) -> bool:
-        """Returns True if hex is in the bottom half (player territory).
-        Player can only place units in their territory (bottom half of the map).
         """
-        # Bottom half: rows >= rows // 2
-        # For odd row counts, the middle row goes to enemy territory
+        Zwraca True jeśli heks jest w dolnej połowie (terytorium gracza).
+        Gracz może umieszczać jednostki tylko w swoim terytorium (dolna połowa mapy).
+        """
         return hex_sprite.r >= (self.rows + 1) // 2
 
     def is_enemy_territory(self, hex_sprite) -> bool:
-        """Returns True if hex is in the top half (enemy territory).
-        Player cannot place units here.
+        """
+        Zwraca True jeśli heks jest w górnej połowie (terytorium wroga).
+        Gracz nie może tutaj umieszczać jednostek.
         """
         return hex_sprite.r < (self.rows + 1) // 2
 
@@ -224,12 +210,11 @@ class HexGridManager:
                 h.redraw()
 
     def is_combat_active(self):
-        """Return True when combat is ongoing and grid fully hidden."""
+        """Zwraca True gdy walka trwa i siatka jest całkowicie ukryta."""
         return self.combat_mode and self.grid_fully_hidden
 
-    # --- Occupancy helpers ---
     def initialize_occupancy(self):
-        """Assign current units to nearest hex centers to seed occupancy."""
+        """Przypisuje bieżące jednostki do najbliższych środków heksów, aby zainicjować mapę zajętości."""
         for key in list(self.occupancy.keys()):
             self.occupancy[key] = None
         for u in self.units:
@@ -244,7 +229,7 @@ class HexGridManager:
                         u.sync_pos_from_rect()
 
     def find_nearest_hex_center(self, pos):
-        """Return dict with hex and distance to its center for given screen pos."""
+        """Zwraca słownik z heksem i dystansem do jego środka dla podanej pozycji na ekranie."""
         best = None
         bx, by = pos
         for h in self.hexes:
@@ -258,11 +243,9 @@ class HexGridManager:
 
     def assign_unit_to_hex(self, unit, hex_sprite):
         key = (hex_sprite.r, hex_sprite.c)
-        # clear any previous assignment of this unit
         for k, v in self.occupancy.items():
             if v is unit:
                 self.occupancy[k] = None
-        # set new if free
         if self.occupancy.get(key) is None:
             self.occupancy[key] = unit
             unit.rect.center = hex_sprite.rect.center
@@ -274,16 +257,13 @@ class HexGridManager:
         return False
 
     def assign_unit_to_hex_animated(self, unit, hex_sprite, frames: int = 10):
-        """Assign unit to hex in occupancy and animate movement to hex center."""
+        """Przypisuje jednostkę do heksu w mapie zajętości i animuje ruch do środka heksu."""
         key = (hex_sprite.r, hex_sprite.c)
-        # clear any previous assignment of this unit
         for k, v in self.occupancy.items():
             if v is unit:
                 self.occupancy[k] = None
-        # set new if free
         if self.occupancy.get(key) is None:
             self.occupancy[key] = unit
-            # Only animate if the unit supports it; otherwise fall back to instant.
             if hasattr(unit, 'start_snap_move'):
                 unit.start_snap_move(hex_sprite.rect.center, frames=frames)
             else:
@@ -323,60 +303,46 @@ class HexGridManager:
         press = pygame.mouse.get_pressed()[0]
 
         if self.selected_unit is None and press:
-            # start drag
             for sprite in self.units:
                 if not hasattr(sprite, 'hitbox'):
                     continue
-                # Disallow dragging enemy (red) units unless enabled
                 if getattr(sprite, 'team', None) == 'red' and not self. allow_enemy_drag:
                     continue
                 if sprite.hitbox. collidepoint(mouse_pos):
                     self.selected_unit = sprite
-                    # Cancel any ongoing snap animation so drag takes full control
                     try:
                         if hasattr(self.selected_unit, '_snap_move_active'):
                             self.selected_unit._snap_move_active = False
                     except Exception:
                         pass
                     self._drag_prev_center = sprite.rect.center
-                    # Remember which hex the unit currently occupies
                     self._drag_prev_hex_key = None
                     for k, v in self. occupancy.items():
                         if v is sprite:
                             self._drag_prev_hex_key = k
                             break
-                    # Apply color overrides based on territory and occupancy
-                    # Enemy territory gets red tint, occupied hexes get dark, free player hexes get normal
                     for h in self.hexes:
-                        # Check if this hex is in enemy territory (top half)
                         if self.is_enemy_territory(h):
-                            # Show red tint for enemy territory - player cannot place here
                             h. dynamic_color = ENEMY_TERRITORY_COLOR
                         else:
-                            # Player territory (bottom half) - check occupancy
                             occ = self.occupancy.get((h.r, h. c))
                             if occ is None or occ is sprite:
-                                # Free hex or the hex the dragged unit came from
                                 if DRAG_FREE_COLOR is not None:
                                     h.dynamic_color = DRAG_FREE_COLOR
                             else:
-                                # Check merge eligibility
                                 if self._can_merge(self.selected_unit, occ):
                                     h.dynamic_color = MERGE_TARGET_COLOR
                                 else:
-                                    # Do not grey-out occupied player hexes; leave default color
                                     h.dynamic_color = None
                         h.redraw()
                     break
 
         if self.selected_unit and press:
-            # dragging following mouse
             self.selected_unit.rect = self.selected_unit.image.get_rect(center=mouse_pos)
             self.selected_unit.hitbox = self.selected_unit.rect.copy().inflate(
                 -self.selected_unit.rect.width * 0.7, -self.selected_unit.rect.height * 0.7)
 
         if self.selected_unit and not press:
-            # release: attempt snap to nearest free hex; else revert
             placed = False
             nearest = self.find_nearest_hex_center(self.selected_unit.rect.center)
             if nearest:
@@ -386,17 +352,14 @@ class HexGridManager:
                     if (self.is_hex_free(h) or occ is self.selected_unit):
                         placed = self.assign_unit_to_hex_animated(self.selected_unit, h, frames=10)
                     else:
-                        # attempt merge when dropping onto occupied hex
                         if self._can_merge(self.selected_unit, occ):
                             self._perform_merge(self.selected_unit, occ, h)
                             placed = True
                         else:
-                            # attempt swap when different type/level
                             if self._can_swap(self.selected_unit, occ, h):
                                 self._perform_swap(self.selected_unit, occ, h)
                                 placed = True
             if not placed and self._drag_prev_center:
-                # revert to original hex center if known
                 revert_center = self._drag_prev_center
                 if self._drag_prev_hex_key is not None:
                     r, c = self._drag_prev_hex_key
@@ -412,7 +375,6 @@ class HexGridManager:
                         self.selected_unit.sync_pos_from_rect()
                     self.selected_unit.hitbox = self.selected_unit.rect.copy().inflate(
                         -self.selected_unit.rect.width * 0.7, -self.selected_unit.rect.height * 0.7)
-            # clear drag state and color overrides
             for h in self.hexes:
                 if h.dynamic_color is not None:
                     h.dynamic_color = None
@@ -429,12 +391,9 @@ class HexGridManager:
         for sprite in self.units:
             if not hasattr(sprite, 'hitbox'):
                 continue
-            # Only snap when not dragging
             if self.selected_unit is None:
-                # Do not fight active placement animations
                 if hasattr(sprite, 'is_snap_moving') and sprite.is_snap_moving():
                     continue
-                # If this unit is already assigned to a hex, gently keep it on that hex center
                 assigned_key = None
                 for k, v in self.occupancy.items():
                     if v is sprite:
@@ -457,7 +416,6 @@ class HexGridManager:
                             sprite.hitbox = sprite.rect.copy().inflate(
                                 -sprite.rect.width * 0.7, -sprite.rect.height * 0.7)
                 else:
-                    # Fallback: seed occupancy if missing
                     nearest = self.find_nearest_hex_center(sprite.rect.center)
                     if nearest:
                         h = nearest['hex']
@@ -471,7 +429,6 @@ class HexGridManager:
         from autochess.game.units import Unit
         all_units = [u for u in self.units if isinstance(u, Unit) and u.alive]
 
-        # Determine how many combat logic steps to run this frame based on sim_speed
         steps = int(self.sim_speed)
         self._sim_fraction_accum += (self.sim_speed - steps)
         if self._sim_fraction_accum >= 1.0:
@@ -484,14 +441,14 @@ class HexGridManager:
             for unit in all_units:
                 unit.combat_update(all_units)
 
-    # placement used by spawners to ensure one unit per hex
     def place_unit_on_free_hex(self, unit, prefer_top=True):
-        """Place unit on first free hex scanning rows.
-        prefer_top: True for enemy (red), False for player (blue)
+        """
+        Umieszcza jednostkę na pierwszym wolnym heksie, skanując rzędy.
+        prefer_top: True dla wroga (czerwony), False dla gracza (niebieski)
         """
         seq = sorted(self.hexes, key=lambda h: (h.r, h.c))
         if prefer_top:
-            seq = sorted(seq, key=lambda h: h.r)  # small r is top
+            seq = sorted(seq, key=lambda h: h.r)
         else:
             seq = sorted(seq, key=lambda h: -h.r)
         for h in seq:
@@ -501,18 +458,17 @@ class HexGridManager:
         return False
 
     def place_unit_on_free_hex_in_territory(self, unit, team:  str):
-        """Place unit on first free hex within the appropriate territory.
-        Blue units go to player territory (bottom half).
-        Red units go to enemy territory (top half).
+        """
+        Umieszcza jednostkę na pierwszym wolnym heksie w odpowiednim terytorium.
+        Niebieskie jednostki idą do terytorium gracza (dolna połowa).
+        Czerwone jednostki idą do terytorium wroga (górna połowa).
         """
         if team == 'blue':
-            # Player territory - bottom half, prefer bottom-most rows first
             valid_hexes = [h for h in self.hexes if self.is_player_territory(h)]
-            valid_hexes = sorted(valid_hexes, key=lambda h: (-h.r, h.c))  # bottom first
+            valid_hexes = sorted(valid_hexes, key=lambda h: (-h.r, h.c))
         else:
-            # Enemy territory - top half, prefer top-most rows first
             valid_hexes = [h for h in self.hexes if self.is_enemy_territory(h)]
-            valid_hexes = sorted(valid_hexes, key=lambda h:  (h.r, h.c))  # top first
+            valid_hexes = sorted(valid_hexes, key=lambda h:  (h.r, h.c))
 
         for h in valid_hexes:
             if self.is_hex_free(h):
@@ -537,9 +493,8 @@ class HexGridManager:
         self.set_the_center()
         self.update_combat()
 
-    # --- Merge mechanics ---
     def _can_merge(self, a, b) -> bool:
-        """Return True if units a and b can merge (same team, name, and level)."""
+        """Zwraca True jeśli jednostki a i b mogą się połączyć (ta sama drużyna, nazwa i poziom)."""
         if a is None or b is None:
             return False
         if a is b:
@@ -556,20 +511,18 @@ class HexGridManager:
         return la == lb
 
     def _perform_merge(self, dragged, target, target_hex):
-        """Merge dragged unit into target unit positioned on target_hex.
-        The target evolves; dragged is removed. Target remains on its hex.
         """
-        # Evolve target
+        Łączy przeciąganą jednostkę z jednostką docelową na target_hex.
+        Jednostka docelowa ewoluuje; przeciągana jest usuwana. Cel pozostaje na swoim heksie.
+        """
         if hasattr(target, 'evolve'):
             target.evolve()
-        # Remove dragged from groups and occupancy
         if self._drag_prev_hex_key is not None and self.occupancy.get(self._drag_prev_hex_key) is dragged:
             self.occupancy[self._drag_prev_hex_key] = None
         try:
             dragged.kill()
         except Exception:
             pass
-        # Ensure target stays assigned to target_hex in occupancy
         key = (target_hex.r, target_hex.c)
         self.occupancy[key] = target
         target.rect.center = target_hex.rect.center
@@ -577,14 +530,14 @@ class HexGridManager:
             target.sync_pos_from_rect()
         target.hitbox = target.rect.copy().inflate(-target.rect.width * 0.7, -target.rect.height * 0.7)
 
-    # --- Swap mechanics ---
     def _can_swap(self, a, b, hex_sprite) -> bool:
-        """Return True if dropping `a` onto `b` should swap their positions.
-        Rules:
-        - Different unit type/level (i.e., merge not possible)
-        - Drop target hex must be in player territory
-        - Both units belong to the same team ('blue' typically)
-        - Dragged unit must have a known previous hex to swap with
+        """
+        Zwraca True jeśli upuszczenie jednostki `a` na `b` powinno zamienić ich pozycje.
+        Zasady:
+        - Różny typ/poziom jednostki (tj. połączenie niemożliwe)
+        - Docelowy heks musi być w terytorium gracza
+        - Obie jednostki należą do tej samej drużyny (zazwyczaj 'blue')
+        - Przeciągana jednostka musi mieć znany poprzedni heks do zamiany
         """
         if a is None or b is None:
             return False
@@ -598,20 +551,18 @@ class HexGridManager:
             return False
         if self._drag_prev_hex_key is None:
             return False
-        # default behavior targets player (blue) units; enemy drag is typically disabled
-        # but if enabled, still require same-team swap to avoid cross-team swaps
         return True
 
     def _perform_swap(self, dragged, other, target_hex):
-        """Swap positions between `dragged` (currently being moved) and `other` on `target_hex`.
-        Uses `_drag_prev_hex_key` as the origin hex for `dragged`.
+        """
+        Zamienia pozycje między `dragged` (aktualnie przemieszczaną) a `other` na `target_hex`.
+        Używa `_drag_prev_hex_key` jako źródłowego heksu dla `dragged`.
         """
         prev_key = self._drag_prev_hex_key
         if prev_key is None:
             return
         target_key = (target_hex.r, target_hex.c)
 
-        # Move `other` to dragged's previous hex
         prev_hex_center = None
         for hx in self.hexes:
             if hx.r == prev_key[0] and hx.c == prev_key[1]:
@@ -620,13 +571,10 @@ class HexGridManager:
         if prev_hex_center is None:
             prev_hex_center = self._drag_prev_center
 
-        # Update occupancy
-        # Ensure current mappings are cleared for both units
         for k, v in list(self.occupancy.items()):
             if v is dragged or v is other:
                 self.occupancy[k] = None
 
-        # Assign `dragged` to target hex
         self.occupancy[target_key] = dragged
         if hasattr(dragged, 'start_snap_move'):
             dragged.start_snap_move(target_hex.rect.center, frames=10)
@@ -636,7 +584,6 @@ class HexGridManager:
                 dragged.sync_pos_from_rect()
             dragged.hitbox = dragged.rect.copy().inflate(-dragged.rect.width * 0.7, -dragged.rect.height * 0.7)
 
-        # Assign `other` to previous hex
         if prev_key is not None:
             self.occupancy[prev_key] = other
         if prev_hex_center is not None:

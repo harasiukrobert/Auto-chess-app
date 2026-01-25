@@ -5,12 +5,9 @@ SCREEN_HEIGHT = 1080
 # map settings
 title_size = 64
 
-# Board positioning (pixels): nudge the hex grid center without changing hex or unit sizes.
-# Negative Y moves the grid up; positive Y moves it down.
 BOARD_CENTER_OFFSET_X = 0
 BOARD_CENTER_OFFSET_Y = -10
 
-# draw order for sprites
 Layer = {
     'Background': 0,
     'Background2': 1,
@@ -27,19 +24,13 @@ Layer = {
     'Units': 12,
 }
 
-# game loop settings
 FPS = 120
 
-# audio / UI settings
-# default menu volume — changed to 50% so sliders start at a sensible level
 DEFAULT_VOLUME = 0.50
-# Point this to your menu music file (wav or ogg).Put menu.wav at files/audio/menu.wav
 MUSIC_PATH = 'files/audio/menu.wav'
 
-# simple UI colors (used as sensible defaults)
 COLOR_BG = (10, 10, 10)
 COLOR_TEXT = (230, 230, 230)
-# main blue accent used across UI
 COLOR_HIGHLIGHT = (80, 125, 170)
 COLOR_SUBTLE = (130, 130, 130)
 

@@ -1,19 +1,18 @@
 """
-Simple heuristic AI for enemy unit placement.
-Places units based on their role:
-- Frontline tanks (warrior, lancer): closest to middle (highest rows in enemy zone)
-- Midline assassins:  behind tanks but still forward
-- Backline (archer, monk, witch): top of map (lowest rows in enemy zone)
+Prosta heurystyczna AI do rozmieszczania jednostek przeciwnika.
+Rozmieszcza jednostki na podstawie ich roli:
+- Tanki na pierwszej linii (warrior, lancer): najbliżej środka (najwyższe rzędy w strefie wroga)
+- Zabójcy na środkowej linii: za tankami, ale wciąż z przodu
+- Tylna linia (archer, monk, witch): góra mapy (najniższe rzędy w strefie wroga)
 """
 
-# Unit role definitions
 TANK_UNITS = {'warrior', 'lancer'}
 MIDLINE_UNITS = {'assassin'}
 BACKLINE_UNITS = {'archer', 'monk', 'witch'}
 
 
 def get_unit_role(unit_name: str) -> str:
-    """Returns 'tank', 'midline', 'backline', or 'unknown'."""
+    """Zwraca 'tank', 'midline', 'backline' lub 'unknown'."""
     name_lower = unit_name.lower()
     if name_lower in TANK_UNITS:
         return 'tank'
@@ -26,42 +25,34 @@ def get_unit_role(unit_name: str) -> str:
 
 def compute_enemy_placement(unit_specs: list, hex_manager) -> list:
     """
-    Given a list of unit specs [{'name': .. ., 'lvl': ... }, ...] and a hex_manager,
-    compute optimal hex positions for each unit.
+    Na podstawie listy specyfikacji jednostek [{'name': ..., 'lvl': ...}, ...] i hex_managera
+    oblicza optymalne pozycje heksów dla każdej jednostki.
 
-    Returns list of specs with 'hex' key added:  [{'name': .. ., 'lvl': ..., 'hex':  HexSprite}, ...]
+    Zwraca listę specyfikacji z dodanym kluczem 'hex': [{'name': ..., 'lvl': ..., 'hex': HexSprite}, ...]
     """
-    # Get all enemy territory hexes
     enemy_hexes = [h for h in hex_manager.hexes if hex_manager.is_enemy_territory(h)]
 
     if not enemy_hexes:
-        return unit_specs  # No hexes available
+        return unit_specs
 
-    # Categorize units by role
     backline_specs = [s for s in unit_specs if get_unit_role(s.get('name', '')) == 'backline']
     midline_specs = [s for s in unit_specs if get_unit_role(s.get('name', '')) == 'midline']
     tank_specs = [s for s in unit_specs if get_unit_role(s. get('name', '')) == 'tank']
     unknown_specs = [s for s in unit_specs if get_unit_role(s.get('name', '')) == 'unknown']
 
-    # Sort hexes by row priority, but prefer columns near the *center* of the board
-    # to avoid AI units stacking on the far left.
     try:
         cols = int(getattr(hex_manager, 'cols', 0) or 0)
     except Exception:
         cols = 0
     center_c = (cols - 1) / 2.0 if cols > 0 else 0.0
 
-    # Backline wants lowest row numbers (furthest from player - top of map)
-    backline_hexes = sorted(enemy_hexes, key=lambda h: (h.r, abs(h.c - center_c), h.c))  # top first, center-out
-    # Midline wants middle rows (we'll filter by row later)
+    backline_hexes = sorted(enemy_hexes, key=lambda h: (h.r, abs(h.c - center_c), h.c))
     midline_hexes = sorted(enemy_hexes, key=lambda h: (h.r, abs(h.c - center_c), h.c))
-    # Tanks want highest row numbers (closest to player - bottom of enemy zone)
-    tank_hexes = sorted(enemy_hexes, key=lambda h: (-h.r, abs(h.c - center_c), h.c))  # bottom first, center-out
+    tank_hexes = sorted(enemy_hexes, key=lambda h: (-h.r, abs(h.c - center_c), h.c))
 
     result = []
     used_hexes = set()
 
-    # Place backline units first (top rows - furthest from battle)
     for spec in backline_specs:
         for h in backline_hexes:
             if (h.r, h. c) not in used_hexes:
@@ -69,14 +60,11 @@ def compute_enemy_placement(unit_specs: list, hex_manager) -> list:
                 result.append({**spec, 'hex': h})
                 break
 
-    # Place midline units (assassins) - prefer middle rows if available, otherwise behind tanks
-    # Get row range for midline positioning
     if enemy_hexes:
         min_row = min(h.r for h in enemy_hexes)
         max_row = max(h.r for h in enemy_hexes)
         mid_row = (min_row + max_row) // 2
 
-        # Prefer hexes around the middle row
         midline_preferred = sorted(
             [h for h in enemy_hexes if (h.r, h.c) not in used_hexes],
             key=lambda h: (abs(h.r - mid_row), abs(h.c - center_c), h.r, h.c)
@@ -89,7 +77,6 @@ def compute_enemy_placement(unit_specs: list, hex_manager) -> list:
                     result.append({**spec, 'hex': h})
                     break
 
-    # Place tank units last (bottom rows - front line)
     for spec in tank_specs:
         for h in tank_hexes:
             if (h.r, h.c) not in used_hexes:
@@ -97,7 +84,6 @@ def compute_enemy_placement(unit_specs: list, hex_manager) -> list:
                 result.append({**spec, 'hex': h})
                 break
 
-    # Place unknown units anywhere available
     all_available = sorted(enemy_hexes, key=lambda h: (h.r, abs(h.c - center_c), h.c))
     for spec in unknown_specs:
         for h in all_available:

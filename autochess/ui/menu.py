@@ -8,8 +8,8 @@ from autochess.utils.resource import resource_path
 class Menu:
     def __init__(self, screen, options, font=None, colors=None, logo_path='files/ui/hexa2.png'):
         """
-        Menu that uses artwork button images if present.
-        Expects button images at files/ui/buttons/<key>.png where key is 'play', 'options', 'quit'
+        Menu używające obrazków przycisków jeśli są dostępne.
+        Oczekuje obrazków przycisków w files/ui/buttons/<key>.png gdzie key to 'play', 'options', 'quit'
         """
         self.screen = screen
         self.options = options  # list of (label, action_key)

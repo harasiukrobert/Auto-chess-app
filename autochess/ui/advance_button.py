@@ -3,8 +3,8 @@ import pygame
 
 class PlanningAdvanceButton:
     """
-    Simple bottom-right button shown during planning to start combat.
-    Draw-only; caller controls when to show and handles the click result.
+    Prosty przycisk w prawym dolnym rogu wyświetlany podczas planowania, aby rozpocząć walkę.
+    Tylko rysowanie; wywołujący kontroluje kiedy pokazać i obsługuje wynik kliknięcia.
     """
 
     def __init__(self, screen, label="FIGHT!", colors=None, size=None, margin=16, radius=6):

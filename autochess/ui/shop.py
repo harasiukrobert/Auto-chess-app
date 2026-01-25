@@ -9,7 +9,7 @@ from autochess.utils.resource import resource_path
 
 class Shop:
     """
-    Shop overlay for the planning phase.
+    Nakładka sklepu dla fazy planowania.
     """
 
     def __init__(self, screen, items, colors=None, on_spawn=None, on_get_gold=None, on_deduct_gold=None, on_can_spawn=None):
@@ -18,48 +18,30 @@ class Shop:
         self.offer_count = 4
         self.offers = []
 
-        # Lock prevents automatic new-round rerolls (manual paid rerolls still allowed).
         self.locked = False
 
-        # ==================================================================================
-        # CONFIGURATION SECTION
-        # ==================================================================================
-
-        # 1. CARD SIZE MODIFIER
         self.CARD_SIZE_MULTIPLIER = 1.29
 
-        # 2. CARD POSITION OFFSETS (x, y) in pixels
         self.card_offsets = [
-            (77, 0),  # Card 1 (Leftmost)
-            (57, 0),  # Card 2
-            (39, 0),  # Card 3
-            (20, 0)  # Card 4 (Rightmost)
+            (77, 0),
+            (57, 0),
+            (39, 0),
+            (20, 0)
         ]
 
-        # 3. REROLL BUTTON OFFSETS (x, y, width_adjust, height_adjust)
         self.reroll_offsets = (25, 0, 54, 0)
 
-        # 3b. LOCK BUTTON OFFSETS (x, y, width_adjust, height_adjust)
-        # Lock icon is part of shop_bar.png; hitbox is derived from the right-most section.
         self.lock_offsets = (0, 0, 0, 0)
 
-        # Lock hitbox sizing relative to the right-most section.
-        # (0.0-1.0) where 1.0 means use most of the section.
         self.lock_size_multiplier = 0.72
 
-        # 4. GOLD DISPLAY OFFSETS (x, y)
-        # Positive Y -> Move Down, Positive X -> Move Right
         self.gold_offset = (0, 50)
-
-        # ==================================================================================
 
         self.on_spawn = on_spawn
         self.on_get_gold = on_get_gold
         self.on_deduct_gold = on_deduct_gold
-        # Optional: check if there is space to place a unit before purchasing
         self.on_can_spawn = on_can_spawn
 
-        # Debug toggle state
         self.show_hitboxes = False
         self.debug_btn_rect = pygame.Rect(10, 10, 50, 30)
 
@@ -67,11 +49,8 @@ class Shop:
         self.color_text = colors.get('text', (230, 230, 230))
         self.font = pygame.font.SysFont(None, 28)
 
-        # Per-card cost label font
-        # Small enough to fit inside the bottom blue bar on card art
         self.font_cost = pygame.font.SysFont(None, 24, bold=True)
 
-        # GOLD FONT: 64
         self.font_gold = pygame.font.SysFont(None, 64, bold=True)
         self.font_debug = pygame.font.SysFont(None, 20)
 
@@ -95,7 +74,6 @@ class Shop:
         # Prefer the unified runtime asset root used across the project.
         self.assets_root = resource_path(os.path.join('files', 'ui'))
         if not os.path.exists(self.assets_root):
-            # Dev fallback(s): support the repo's historical 'Files/' directory.
             alt = resource_path(os.path.join('Files', 'ui'))
             if os.path.exists(alt):
                 self.assets_root = alt
@@ -112,7 +90,6 @@ class Shop:
         self.shop_bar = self._safe_load_image(bar_path, convert_alpha=True)
         self.coin_img = self._safe_load_image(coin_path, convert_alpha=True)
         if self.coin_img:
-            # COIN ICON: 44x44
             self.coin_img = pygame.transform.smoothscale(self.coin_img, (44, 44))
 
         self.card_images = {}
@@ -135,7 +112,6 @@ class Shop:
             return None
 
     def _load_units_data(self):
-        # Always use embedded configuration from autochess.game.units
         return UNITS_DATA
 
     def _compute_rect(self):
@@ -159,7 +135,6 @@ class Shop:
         x = self.rect.centerx - bw // 2
         y = self.rect.bottom - bh - 5
 
-        # Apply shake offset if active
         sx, sy = self._get_shake_offset()
         x += sx
         y += sy
@@ -193,13 +168,11 @@ class Shop:
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             mx, my = event.pos
 
-            # Check Debug Button Click
             if self.debug_btn_rect.collidepoint(mx, my):
                 self.show_hitboxes = not self.show_hitboxes
                 return None
 
             if hasattr(self, 'bar_rect') and self.bar_rect.collidepoint(mx, my):
-                # Lock toggle (prevents automatic reroll on new round)
                 if self.lock_rect and self.lock_rect.collidepoint(mx, my):
                     self.locked = not bool(self.locked)
                     return None
@@ -215,17 +188,13 @@ class Shop:
                     if brect.collidepoint(mx, my) and idx < len(self.offers):
                         name = self.offers[idx]
                         current_gold = self.on_get_gold() if callable(self.on_get_gold) else 0
-                        # Determine per-unit cost from units_data, fallback to self.unit_cost
                         cost = self._get_unit_cost(name)
-                        # Pre-check: ensure there is space on player's board for this unit
                         if callable(getattr(self, 'on_can_spawn', None)):
                             try:
                                 if not self.on_can_spawn(name):
-                                    # No available player hexes; abort purchase with feedback
                                     self._trigger_shake()
                                     return None
                             except Exception:
-                                # If the callback errors, fail closed (do not buy)
                                 self._trigger_shake()
                                 return None
                         if current_gold >= cost:
@@ -242,25 +211,20 @@ class Shop:
 
         if hasattr(self, 'bar_rect'):
             gold_x = self.bar_rect.right + 20
-            # Center vertically with the bar roughly
             gold_y = self.bar_rect.centery - gold_surf.get_height() // 2
         else:
             gold_x = self.rect.right - 150
             gold_y = self.rect.top + 10
 
-        # Apply Manual Gold Offset
         gold_x += self.gold_offset[0]
         gold_y += self.gold_offset[1]
 
-        # Draw Coin and Gold Text
         if self.coin_img:
             self.screen.blit(self.coin_img, (gold_x, gold_y))
-            # Offset text by coin width + padding (reduced padding for smaller icon)
             self.screen.blit(gold_surf, (gold_x + 50, gold_y + 2))
         else:
             self.screen.blit(gold_surf, (gold_x, gold_y))
 
-        # Draw Debug Button
         btn_color = (50, 200, 50) if self.show_hitboxes else (200, 50, 50)
         pygame.draw.rect(self.screen, btn_color, self.debug_btn_rect)
         debug_txt = self.font_debug.render("DBG", True, (255, 255, 255))
@@ -276,7 +240,6 @@ class Shop:
         section_count = 6
         section_w = bw / section_count
 
-        # SIZE CALCULATION WITH MODIFIER
         base_card_w = section_w * 0.65
         base_card_h = bh * 0.68
 
@@ -293,11 +256,9 @@ class Shop:
         for idx, name in enumerate(self.offers):
             section_x = self.bar_rect.left + (start_section_index + idx) * section_w
 
-            # Base center position
             bx = section_x + (section_w - card_w) / 2
             by = card_y
 
-            # APPLY MANUAL OFFSETS
             if idx < len(self.card_offsets):
                 off_x, off_y = self.card_offsets[idx]
                 bx += off_x
@@ -320,13 +281,11 @@ class Shop:
                 txt = self.font.render(initials, True, (255, 255, 255))
                 self.screen.blit(txt, txt.get_rect(center=brect.center))
 
-            # Draw per-card unit cost (next to the coin area on the card art)
             cost = self._get_unit_cost(name)
             cost_text = str(cost)
             cost_surf = self.font_cost.render(cost_text, True, (255, 215, 0))
             cost_shadow = self.font_cost.render(cost_text, True, (0, 0, 0))
 
-            # Anchor the text within the bottom blue strip, left of the coin.
             pad = max(3, int(min(brect.width, brect.height) * 0.03))
             bottom_strip_h = max(14, int(brect.height * 0.18))
             coin_d = max(10, int(bottom_strip_h * 0.55))
@@ -339,7 +298,6 @@ class Shop:
             self.screen.blit(cost_shadow, (cx + 1, cy + 1))
             self.screen.blit(cost_surf, (cx, cy))
 
-            # DEBUG: Draw Card Hitbox
             if self.show_hitboxes:
                 debug_surf = pygame.Surface((brect.width, brect.height), pygame.SRCALPHA)
                 debug_surf.fill((0, 255, 0, 100))
@@ -348,13 +306,11 @@ class Shop:
 
             self.button_rects.append(brect)
 
-        # Reroll Area Calculation
         reroll_w = section_w
         reroll_h = bh * 0.8
         rx = self.bar_rect.left
         ry = self.bar_rect.centery - (reroll_h / 2)
 
-        # Apply Reroll Offsets
         rx += self.reroll_offsets[0]
         ry += self.reroll_offsets[1]
         reroll_w += self.reroll_offsets[2]
@@ -362,8 +318,6 @@ class Shop:
 
         self.reroll_rect = pygame.Rect(rx, ry, reroll_w, reroll_h)
 
-        # Lock Area Calculation (right-most section)
-        # Use a tighter square hitbox centered in the last section so it matches the lock icon.
         lock_section_left = self.bar_rect.left + (section_w * (section_count - 1))
         lock_section_cx = lock_section_left + (section_w / 2)
         lock_section_cy = self.bar_rect.centery
@@ -374,7 +328,6 @@ class Shop:
         lx = lock_section_cx - (lock_w / 2)
         ly = lock_section_cy - (lock_h / 2)
 
-        # Apply Lock Offsets
         lx += self.lock_offsets[0]
         ly += self.lock_offsets[1]
         lock_w += self.lock_offsets[2]
@@ -382,21 +335,18 @@ class Shop:
 
         self.lock_rect = pygame.Rect(lx, ly, lock_w, lock_h)
 
-        # Visual feedback when locked (tint the lock area)
         if self.locked and self.lock_rect:
             overlay = pygame.Surface((self.lock_rect.width, self.lock_rect.height), pygame.SRCALPHA)
             overlay.fill((35, 35, 35, 150))
             self.screen.blit(overlay, self.lock_rect)
             pygame.draw.rect(self.screen, (90, 90, 90), self.lock_rect, 2)
 
-        # DEBUG: Draw Reroll Hitbox
         if self.show_hitboxes and self.reroll_rect:
             debug_surf = pygame.Surface((self.reroll_rect.width, self.reroll_rect.height), pygame.SRCALPHA)
             debug_surf.fill((255, 0, 0, 100))
             self.screen.blit(debug_surf, self.reroll_rect)
             pygame.draw.rect(self.screen, (255, 0, 0), self.reroll_rect, 2)
 
-        # DEBUG: Draw Lock Hitbox
         if self.show_hitboxes and self.lock_rect:
             debug_surf = pygame.Surface((self.lock_rect.width, self.lock_rect.height), pygame.SRCALPHA)
             debug_surf.fill((200, 200, 0, 90))
@@ -416,19 +366,19 @@ class Shop:
         self._roll_offers(initial=False)
 
     def reroll_for_new_round(self):
-        """Automatically reroll at the start of a new round unless locked."""
+        """Automatycznie losuje oferty na początku nowej rundy, chyba że zablokowane."""
         if not bool(self.locked):
             self._roll_offers(initial=False)
 
     def get_state(self) -> dict:
-        """Return a snapshot-safe representation of shop state."""
+        """Zwraca snapshot-bezpieczną reprezentację stanu sklepu."""
         return {
             'offers': list(self.offers) if isinstance(self.offers, list) else [],
             'locked': bool(self.locked),
         }
 
     def set_state(self, state: dict):
-        """Restore shop state from a snapshot."""
+        """Przywraca stan sklepu ze snapshotu."""
         if not isinstance(state, dict):
             return
         offers = state.get('offers', None)
@@ -437,9 +387,6 @@ class Shop:
         if 'locked' in state:
             self.locked = bool(state.get('locked'))
 
-    # ----------------------------------------------------------------------------------
-    # Helpers
-    # ----------------------------------------------------------------------------------
     def _get_unit_cost(self, name: str) -> int:
         try:
             data = self.units_data.get(name, {})
@@ -448,9 +395,6 @@ class Shop:
         except Exception:
             return 1
 
-    # ----------------------------------------------------------------------------------
-    # Feedback: Shake animation when purchase is blocked
-    # ----------------------------------------------------------------------------------
     def _trigger_shake(self, duration_ms: int = 280, magnitude: int = 10):
         try:
             now = pygame.time.get_ticks()
@@ -466,7 +410,6 @@ class Shop:
             return (0, 0)
         if now >= self._shake_until or self._shake_mag <= 0:
             return (0, 0)
-        # Alternate direction every _shake_speed_ms; simple horizontal shake
         step = (now // max(1, self._shake_speed_ms)) % 2
         sign = 1 if step == 0 else -1
         return (sign * self._shake_mag, 0)

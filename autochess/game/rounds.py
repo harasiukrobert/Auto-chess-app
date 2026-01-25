@@ -2,27 +2,17 @@ import math
 import random
 from typing import Any, Dict, List, Optional
 
-# ---------------- Procedural Rounds Config ----------------
-# Keep round tuning here (not in config/setting.py).
 ROUND_CONFIG: Dict[str, Any] = {
-    # End goal
     "max_rounds": 10,
 
-    # Random starting gold range (inclusive)
     "starting_gold_min": 2,
     "starting_gold_max": 4,
 
-    # Random gold reward per completed round.
-    # Reward range increases with round number:
-    #   min = reward_min_base + (round-1) * reward_min_inc_per_round
-    #   max = reward_max_base + (round-1) * reward_max_inc_per_round
     "reward_min_base": 5,
     "reward_max_base": 7,
     "reward_min_inc_per_round": 0,
     "reward_max_inc_per_round": 1,
 
-    # Board sizes ramp from small to large across the run.
-    # Round 1 starts at min size.
     "board_min_cols": 3,
     "board_min_rows": 4,
     "board_max_cols": 11,
@@ -31,10 +21,10 @@ ROUND_CONFIG: Dict[str, Any] = {
 
 
 class RoundManager:
-    """Provides procedural round configurations.
-
-    Rounds are generated once per run and cached so multiple calls for the
-    same round number remain consistent.
+    """
+    Dostarcza proceduralne konfiguracje rund.
+    Rundy są generowane raz na rozgrywkę i cache'owane, więc wielokrotne wywołania
+    dla tego samego numeru rundy pozostają spójne.
     """
 
     def __init__(self, seed: Optional[int] = None, config: Optional[Dict[str, Any]] = None):
@@ -42,7 +32,6 @@ class RoundManager:
         self._rng = random.Random(self._seed)
         self._config = dict(ROUND_CONFIG)
         if config:
-            # Allow callers to override without mutating module-level defaults.
             self._config.update(config)
         self._max_rounds = int(self._config.get("max_rounds", 0) or 0)
         self._rounds_by_number: Dict[int, Dict[str, Any]] = {}
@@ -75,27 +64,22 @@ class RoundManager:
         max_cols = int(self._config.get("board_max_cols", 0) or 0)
         max_rows = int(self._config.get("board_max_rows", 0) or 0)
 
-        # Rows must be even.
         def _clamp_even(value: int, lo: int, hi: int) -> int:
             lo = int(lo)
             hi = int(hi)
             if hi < lo:
                 lo, hi = hi, lo
             v = int(value)
-            # Prefer rounding up to the next even number.
             if v % 2 != 0:
                 v += 1
-            # Clamp.
             if v > hi:
                 v = hi
             if v < lo:
                 v = lo
-            # Final safeguard: if clamping landed on odd (e.g., odd bounds), adjust down.
             if v % 2 != 0:
                 v = max(lo, v - 1)
             return v
 
-        # Round 1 should start small.
         if n <= 1 or self._max_rounds <= 1:
             return min_cols, min_rows
 
@@ -106,7 +90,6 @@ class RoundManager:
         cap_rows = max(min_rows, min(max_rows, cap_rows))
         cap_rows = _clamp_even(cap_rows, min_rows, max_rows)
 
-        # Deterministic growth: size increases with rounds.
         return cap_cols, cap_rows
 
     def _generate_round(self, number: int) -> Dict[str, Any]:
@@ -147,11 +130,9 @@ class RoundManager:
         return list(r.get("enemies", []))
 
     def get_player_start(self) -> List[Dict[str, Any]]:
-        # Player starts with no pre-placed units; they must buy via the shop.
         return []
 
     def get_reward(self, number: int) -> int:
         r = self.get_round(number) or {}
         return int(r.get("reward_gold", 0))
 
-    # Global enemy spawn deprecated in favor of per-enemy row/col hints.

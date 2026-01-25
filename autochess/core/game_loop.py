@@ -28,27 +28,20 @@ class Game:
         except Exception:
             self._mixer_ready = False
 
-        # Create a window first (we may switch to fullscreen after reading settings)
-        # FIX: ensure we pass exactly two numbers (width, height)
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
         pygame.display.set_caption("HEXA")
 
-        # States
         self.state = "MENU"
-        # start with a sensible default; may be overridden by settings screen/app saved state
         self.volume = DEFAULT_VOLUME
         self.sfx_volume = DEFAULT_VOLUME
 
-        # track currently-playing music path so we don't reload unnecessarily
         self._current_music_path = None
 
-        # Try load menu music early (volume will be applied again after settings are loaded)
         self.menu_music_path = MUSIC_PATH
         self.play_music_path = "files/audio/buying_phase.wav"
 
         self._ensure_play_music(self.menu_music_path, self.volume)
 
-        # Core
         self.board = Board(
             hex_center=(
                 (SCREEN_WIDTH // 2 + title_size) + int(BOARD_CENTER_OFFSET_X),
@@ -56,17 +49,13 @@ class Game:
             )
         )
         self.clock = pygame.time.Clock()
-        # Turn-based phases inside PLAY
-        self.phase = 'PLANNING'  # 'PLANNING' | 'COMBAT'
-        # Set when the player clicks SURRENDER; resolved in the same place as normal round-end
+        self.phase = 'PLANNING'
         self._surrender_requested = False
-        # End screen UI (created lazily later)
         self.end_screen = EndScreen(
             screen=self.screen,
             colors={"text": COLOR_TEXT, "highlight": COLOR_HIGHLIGHT, "subtle": COLOR_SUBTLE},
         )
 
-        # Shop overlay (planning only)
         self.shop = Shop(
             screen=self.screen,
             items=['warrior', 'archer', 'lancer', 'monk', 'assassin', 'witch'],
@@ -77,16 +66,12 @@ class Game:
             on_can_spawn=self._can_spawn_blue,
         )
 
-        # Snapshot of shop state at the START of planning (offers + lock).
-        # Used to rollback paid rerolls on loss along with refunded gold.
         self._pre_planning_shop_snapshot = None
 
-        # Static archer background (scaled+cropped)
         self.menu_bg = BackgroundStatic(
             screen=self.screen, image_path="files/ui/bg_archer.png", overlay_alpha=28
         )
 
-        # UI: pass the new logo path
         self.menu = Menu(
             screen=self.screen,
             options=[("Play", "play"), ("Options", "settings"), ("Quit", "exit")],
@@ -94,7 +79,6 @@ class Game:
             logo_path="files/ui/hexa2.png",
         )
 
-        # Settings screen: give a ref so it can apply volume/fullscreen immediately
         self.settings_screen = SettingsScreen(
             screen=self.screen,
             volume=self.volume,
@@ -103,9 +87,7 @@ class Game:
             game_ref=self,
         )
 
-        # Read saved settings / current mixer and apply to game audio state
         try:
-            # SettingsScreen now exposes getters and also prefers persisted values
             self.volume = getattr(self.settings_screen, "volume", self.settings_screen.get_music_volume())
             self.sfx_volume = getattr(self.settings_screen, "sfx_volume", self.settings_screen.get_sfx_volume())
             self.set_volume(self.volume)
@@ -113,15 +95,12 @@ class Game:
         except Exception:
             pass
 
-        # Apply fullscreen at startup only if settings request it.
-        # Default is windowed; see config/user_settings.json and SettingsScreen.DEFAULTS.
         try:
             if self.settings_screen.is_fullscreen():
                 self.apply_fullscreen(True)
         except Exception:
             pass
 
-        # Planning phase advance button (UI component)
         self.advance_btn = PlanningAdvanceButton(
             screen=self.screen,
             label="FIGHT!",
@@ -136,7 +115,6 @@ class Game:
             radius=6,
         )
 
-        # Speed control (combat sim speed)
         self.speed_ui = SpeedControl(
             screen=self.screen,
             on_change=self._on_speed_change,
@@ -152,7 +130,7 @@ class Game:
         self.startgame()
 
     def _start_new_run(self):
-        """Start a brand-new run when entering PLAY from the main menu."""
+        """Rozpoczyna nową rozgrywkę po wejściu w PLAY z menu głównego."""
         try:
             self.board.reset_run()
         except Exception:
@@ -161,26 +139,23 @@ class Game:
         self._surrender_requested = False
         self.phase = 'PLANNING'
 
-        # Reset shop to a clean state for a new run.
         try:
             self.shop.locked = False
             self.shop.reroll_free()
         except Exception:
             pass
 
-        # Clear any previous planning snapshot and take a fresh one.
         self._pre_planning_shop_snapshot = None
         self._save_pre_planning_snapshot()
 
     def _go_to_menu(self, *, reset_run: bool = False):
-        """Return to main menu in a consistent, safe state."""
+        """Powraca do menu głównego w spójnym, bezpiecznym stanie."""
         if reset_run:
             try:
                 self.board.reset_run()
             except Exception:
                 pass
 
-        # Cancel in-game transient state so the menu isn't just a visual overlay.
         self._surrender_requested = False
         self.phase = 'PLANNING'
         try:
@@ -193,7 +168,6 @@ class Game:
         except Exception:
             pass
 
-        # Reset menu hover/click targets so the menu is immediately interactive.
         try:
             self.menu.hovered = None
             self.menu.selected = 0
@@ -204,11 +178,8 @@ class Game:
         self.state = "MENU"
         self._ensure_play_music(self.menu_music_path, self.volume)
 
-    # ---------------------------------------------------------------------
-    # Snapshot helpers
-    # ---------------------------------------------------------------------
     def _save_pre_planning_snapshot(self):
-        """Capture board + shop state at the start of planning."""
+        """Zapisuje stan planszy i sklepu na początku planowania."""
         try:
             self.board.save_pre_planning_snapshot()
         except Exception:
@@ -219,7 +190,7 @@ class Game:
             self._pre_planning_shop_snapshot = None
 
     def _restore_from_pre_planning_snapshot(self):
-        """Restore board + shop state to the planning-start snapshot (used on loss)."""
+        """Przywraca stan planszy i sklepu do snapshotu z początku planowania (używane przy przegranej)."""
         try:
             self.board.restore_from_pre_planning_snapshot()
         except Exception:
@@ -231,7 +202,7 @@ class Game:
             pass
 
     def _on_speed_change(self, value: float):
-        """Apply speed change to current board's hex manager (combat sim speed)."""
+        """Zastosowuje zmianę prędkości do hex managera bieżącej planszy (prędkość symulacji walki)."""
         try:
             if hasattr(self.board, 'hex_manager') and self.board.hex_manager:
                 self.board.hex_manager.set_sim_speed(float(value))
@@ -239,11 +210,9 @@ class Game:
             pass
 
     def _shop_spawn_unit(self, name: str, pos):
-        """Spawn a blue unit via Board, return the instance for drag selection."""
+        """Tworzy niebieską jednostkę przez Board, zwraca instancję do zaznaczenia przeciąganiem."""
         try:
             u = self.board.spawn_blue_unit(name, pos)
-            # Do NOT auto-select while the mouse is still pressed; avoid jumping to shop click
-            # Player can click the unit afterwards to drag it.
             return u
         except Exception as e:
             print(f"Error spawning unit {name}: {e}")
@@ -252,18 +221,18 @@ class Game:
             return None
 
     def _can_spawn_blue(self, name: str):
-        """Return True if there's at least one free player hex for a new blue unit."""
+        """Zwraca True jeśli jest przynajmniej jeden wolny heks gracza dla nowej niebieskiej jednostki."""
         try:
             return bool(self.board.has_free_player_hex())
         except Exception:
             return False
 
     def _get_gold(self):
-        """Get current player gold from board."""
+        """Pobiera aktualne złoto gracza z planszy."""
         return self.board.gold
 
     def _deduct_gold(self, amount: int):
-        """Try to deduct gold. Returns True if successful, False if insufficient funds."""
+        """Próbuje odjąć złoto. Zwraca True jeśli się powiodło, False jeśli brak środków."""
         if self.board.gold >= amount:
             self.board.gold -= amount
             return True
@@ -271,8 +240,8 @@ class Game:
 
     def _ensure_play_music(self, path, vol):
         """
-        Load and play the given music path on loop if different from the currently playing track.
-        If pygame.mixer isn't available or file doesn't exist, do nothing silently.
+        Ładuje i odtwarza muzykę w pętli jeśli różni się od aktualnie granej.
+        Jeśli pygame.mixer nie jest dostępny lub plik nie istnieje, nic nie robi.
         """
         if not self._mixer_ready:
             return
@@ -288,7 +257,7 @@ class Game:
                 try:
                     pygame.mixer.music.load(resolved)
                     pygame.mixer.music.set_volume(vol)
-                    pygame.mixer.music.play(-1)  # loop forever
+                    pygame.mixer.music.play(-1)
                     self._current_music_path = path
                 except Exception:
                     self._current_music_path = None
@@ -302,19 +271,16 @@ class Game:
             self._current_music_path = None
 
     def _load_music(self, path, vol):
-        # Backwards-compatible loader - kept for compatibility with older calls
         try:
             resolved = resource_path(path) if path else None
             if resolved and os.path.exists(resolved):
                 pygame.mixer.music.load(resolved)
                 pygame.mixer.music.set_volume(vol)
-                pygame.mixer.music.play(-1)  # loop forever
+                pygame.mixer.music.play(-1)
                 self._current_music_path = path
         except Exception:
-            # if file not found or load fails, ignore silently
             pass
 
-    # helpers used by settings
     def set_volume(self, vol):
         try:
             pygame.mixer.music.set_volume(vol)
@@ -323,13 +289,11 @@ class Game:
         self.volume = vol
 
     def set_sfx_volume(self, vol):
-        # store sfx volume; if you have SFX sounds, set their volume when playing
         self.sfx_volume = vol
 
     def apply_fullscreen(self, fullscreen):
         flags = pygame.FULLSCREEN if fullscreen else 0
         self.screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), flags)
-        # reassign screens & rebuild scaled backgrounds
         self.menu.screen = self.screen
         self.settings_screen.screen = self.screen
         if hasattr(self, 'shop'):
@@ -337,8 +301,6 @@ class Game:
         self.menu_bg = BackgroundStatic(
             screen=self.screen, image_path="files/ui/bg_archer.png", overlay_alpha=28
         )
-        # settings_screen will rebuild its internal scaled modal on next draw if needed.
-        # update UI controls with new screen
         if hasattr(self, 'advance_btn'):
             self.advance_btn.screen = self.screen
         if hasattr(self, 'speed_ui'):
@@ -357,25 +319,20 @@ class Game:
                     if action == "play":
                         self._start_new_run()
                         self.state = "PLAY"
-                        # switch to play music
                         self._ensure_play_music(self.play_music_path, self.volume)
                     elif action == "settings":
                         self.state = "SETTINGS"
-                        # ensure menu music is playing while in settings
                         self._ensure_play_music(self.menu_music_path, self.volume)
                     elif action == "exit":
                         sys.exit(0)
 
                 elif self.state == "SETTINGS":
-                    # Esc returns to menu (do NOT quit)
                     if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                         self._go_to_menu(reset_run=False)
                         continue
 
-                    # pass events to settings screen
                     result = self.settings_screen.handle_event(event)
                     if result == "changed":
-                        # read new values from settings_screen attributes and apply immediately
                         self.volume = getattr(self.settings_screen, "volume", self.settings_screen.get_music_volume())
                         self.sfx_volume = getattr(self.settings_screen, "sfx_volume",
                                                   self.settings_screen.get_sfx_volume())
@@ -391,24 +348,18 @@ class Game:
                             self._go_to_menu(reset_run=False)
                             continue
                         elif event.key == pygame.K_TAB:
-                            # Toggle combat only from planning
                             if self.phase == 'PLANNING':
-                                # Freeze baseline roster for carry-over on win
                                 self.board.finalize_planning_baseline()
-                                # (Optional) snapshot enemies; not required for rollback
                                 self.board.snapshot_enemy_layout()
                                 self.phase = 'COMBAT'
                                 self.board.hex_manager.toggle_combat()
-                                # Button stays visible; turns into surrender
                                 try:
                                     self.advance_btn.label = "SURRENDER"
                                 except Exception:
                                     pass
-                    # Handle planning button click before routing to shop
                     if self.phase == 'PLANNING':
                         result = self.advance_btn.handle_event(event)
                         if result == "clicked":
-                            # Same behavior as pressing TAB
                             self.board.finalize_planning_baseline()
                             self.board.snapshot_enemy_layout()
                             self.phase = 'COMBAT'
@@ -417,93 +368,69 @@ class Game:
                                 self.advance_btn.label = "SURRENDER"
                             except Exception:
                                 pass
-                            # Skip sending this click to the shop
                             continue
-                    # Handle surrender button click during combat
                     if self.phase == 'COMBAT':
                         result = self.advance_btn.handle_event(event)
                         if result == "clicked":
-                            # Defer resolution to the combat-end section so rollback behaves identically
                             self._surrender_requested = True
                             continue
-                    # route mouse events to shop only in planning phase
                     if self.phase == 'PLANNING':
                         _ = self.shop.handle_event(event)
-                    # Speed control only in COMBAT phase
                     if self.phase == 'COMBAT':
                         _ = self.speed_ui.handle_event(event)
 
                 elif self.state == "END":
-                    # Handle end screen interactions here so events aren't drained earlier
                     action = self.end_screen.handle_event(event)
                     if action == 'menu':
                         self._go_to_menu(reset_run=True)
                     elif action == 'exit':
                         sys.exit(0)
 
-            # Draw per state
             if self.state == "MENU":
-                # draw archer background and menu
                 self.menu_bg.draw()
                 self.menu.draw(skip_clear=True)
             elif self.state == "SETTINGS":
-                # draw the normal menu background behind the centered modal
                 self.menu_bg.draw()
-                # SettingsScreen draws the centered modal and interactive bars
                 self.settings_screen.draw()
             elif self.state == "PLAY":
-                # ensure play music is active (in case something external changed it)
                 self._ensure_play_music(self.play_music_path, self.volume)
                 self.screen.fill("black")
                 self.board.run()
 
-                # If player surrendered, resolve as an immediate loss using the same rollback path
                 if self.phase == 'COMBAT' and getattr(self, '_surrender_requested', False):
                     self._surrender_requested = False
-                    # Reset combat visuals
                     try:
-                        self.board.hex_manager.toggle_combat()  # back to planning
+                        self.board.hex_manager.toggle_combat()
                     except Exception:
                         pass
-                    # Loss: restore last planning layout to retry
                     self._restore_from_pre_planning_snapshot()
-                    # Rebuild enemies from pre-combat snapshot to original positions
                     try:
                         self.board.rebuild_enemies_from_snapshot(include_extras=False, round_num=self.board.current_round)
                     except Exception:
-                        # Fallback to round config if snapshot missing
                         self.board.respawn_current_round_enemies()
-                    # New planning cycle begins after loss: capture snapshot so future losses
                     self._save_pre_planning_snapshot()
                     self.phase = 'PLANNING'
                     try:
                         self.advance_btn.label = "FIGHT!"
                     except Exception:
                         pass
-                # Keep the action button visible in both phases; label depends on phase
                 try:
                     self.advance_btn.label = "FIGHT!" if self.phase == 'PLANNING' else "SURRENDER"
                 except Exception:
                     pass
                 if self.phase == 'PLANNING':
-                    # Draw shop UI above the board during planning
                     self.shop.draw()
-                # Draw the action button (FIGHT!/SURRENDER)
                 self.advance_btn.draw()
-                # Draw speed control only during COMBAT phase
                 if self.phase == 'COMBAT':
                     self.speed_ui.draw()
 
-                # Draw current round label at top center
                 try:
-                    # Lazy-init a font once
                     if not hasattr(self, '_round_font') or self._round_font is None:
                         self._round_font = pygame.font.SysFont(None, 64)
                     label = f"ROUND {getattr(self.board, 'current_round', 1)}"
                     text_surf = self._round_font.render(label, True, COLOR_TEXT)
                     w, _h = self.screen.get_size()
                     text_rect = text_surf.get_rect(midtop=(w // 2, 10))
-                    # Subtle shadow for readability
                     shadow = self._round_font.render(label, True, (0, 0, 0))
                     shadow_rect = shadow.get_rect(midtop=(text_rect.centerx, text_rect.top + 2))
                     self.screen.blit(shadow, shadow_rect)
@@ -511,59 +438,39 @@ class Game:
                 except Exception:
                     pass
 
-                # Round end detection during combat
                 if self.phase == 'COMBAT' and self.board.hex_manager.is_combat_active():
                     blue_alive, red_alive = self.board.team_alive_counts()
                     if blue_alive == 0 or red_alive == 0:
-                        # End of round
                         player_won = blue_alive > 0 and red_alive == 0
-                        # Reset combat visuals
-                        self.board.hex_manager.toggle_combat()  # back to planning
+                        self.board.hex_manager.toggle_combat()
                         if player_won:
-                            # Advance round, reset units and add new enemies
                             prev_round = self.board.current_round
                             next_round = prev_round + 1
-                            # Award reward for completed round
                             try:
                                 self.board.gold += int(self.board.get_round_reward(prev_round))
                             except Exception:
                                 pass
-                            # Give AI the same round reward
                             try:
                                 self.board._enemy_ai.add_gold(int(self.board.get_round_reward(prev_round)))
                             except Exception:
                                 pass
-                            # Check if there is a next round
                             if self.board.rounds.has_round(next_round):
                                 self.board.current_round = next_round
-                                # keep player's current roster (baseline updated by snapshot during planning)
                                 self.board.reset_units_to_initial()
-                                # Apply next round config (grid + enemies)
                                 self.board.apply_round(self.board.current_round, initial=False)
-                                # New planning phase begins:
-                                # - auto reroll shop for the new round unless locked
-                                # - snapshot shop offers + gold/roster so losses can rollback paid rerolls
                                 try:
                                     self.shop.reroll_for_new_round()
                                 except Exception:
                                     pass
                                 self._save_pre_planning_snapshot()
                             else:
-                                # No more rounds: show end screen
                                 self.state = "END"
                         else:
-                            # Loss: restore last planning layout to retry
                             self._restore_from_pre_planning_snapshot()
-                            # Rebuild enemies from pre-combat snapshot to original positions
                             try:
                                 self.board.rebuild_enemies_from_snapshot(include_extras=False, round_num=self.board.current_round)
                             except Exception:
-                                # Fallback to round config if snapshot missing
                                 self.board.respawn_current_round_enemies()
-                            # Placeholder: reverse purchases from snapshot
-                            # TODO: rollback buys stored in snapshot
-                            # New planning cycle begins after loss: capture snapshot so future losses
-                            # roll back to this restored state (including levels/positions)
                             self._save_pre_planning_snapshot()
                         self.phase = 'PLANNING'
                         try:
@@ -571,7 +478,6 @@ class Game:
                         except Exception:
                             pass
             elif self.state == "END":
-                # Draw menu background and end screen overlay during END state
                 self.menu_bg.draw()
                 self.end_screen.draw()
 

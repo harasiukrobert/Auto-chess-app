@@ -1,8 +1,9 @@
 import pygame
 
 class SpeedControl:
-    """Simple speed selector UI for combat simulation speed.
-    Renders buttons: 0.25x, 0.5x, 1x, 2x, 5x.
+    """
+    Prosty UI selektora prędkości dla prędkości symulacji walki.
+    Renderuje przyciski: 0.25x, 0.5x, 1x, 2x, 5x.
     """
 
     def __init__(self, screen, on_change, colors=None, position=None):
@@ -18,7 +19,6 @@ class SpeedControl:
         self.font = pygame.font.SysFont(None, 24)
         self.values = [0.25, 0.5, 1.0, 2.0, 5.0]
         self.labels = ["0.25x", "0.5x", "1x", "2x", "5x"]
-        # top-right default
         self.position = position or (self.screen.get_width() - 16, 16)
         self._button_rects = []
         self.current_value = 1.0
@@ -29,7 +29,6 @@ class SpeedControl:
     def _layout_buttons(self):
         self._button_rects.clear()
         x, y = self.position
-        # align from right edge
         right = x
         for _ in self.values:
             right -= (self.size[0] + self.spacing)
